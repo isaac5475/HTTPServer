@@ -89,7 +89,23 @@ void request_handler(int fd) {
 }
 
 void get_handler(int fd, struct httpRequest *req) {
-    send(fd, STATUS_CODE_404, strlen(STATUS_CODE_404), 0);
+    char foo_url[] = "static/foo";
+    char bar_url[] = "static/bar";
+    char baz_url[] = "static/baz";
+    if (strncmp(req->route, foo_url, strlen(foo_url)) == 0) {
+        char* resp = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\nFoo";
+        send(fd, resp, strlen(resp), 0);
+    } else if (strncmp(req->route, bar_url, strlen(bar_url)) == 0) {
+        char* resp = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\nBar";
+        send(fd, resp, strlen(resp), 0);
+    } else if (strncmp(req->route, baz_url, strlen(baz_url)) == 0) {
+        char* resp = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\nBaz";
+        send(fd, resp, strlen(resp), 0);
+    } else if (strncmp(req->route, "static/", strlen("static/")) == 0) {
+        char resp[REQUEST_LEN];
+        sprintf(resp, "HTTP/1.1 %s", STATUS_CODE_404);
+        send(fd, resp, strlen(resp), 0);
+    }
 }
 
 
