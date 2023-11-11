@@ -45,8 +45,12 @@ void *get_in_addr(struct sockaddr *sa)
     return &(((struct sockaddr_in6*)sa)->sin6_addr);
 }
 
-int main(void)
+int main(int varc, char* argv[])
 {
+    if (varc != 3) {
+        fprintf(stderr, "Usage: webserver [ipaddr] [port");
+        exit(1);
+    }
     int sockfd, new_fd;  // listen on sock_fd, new connection on new_fd
     struct addrinfo hints, *servinfo, *p;
     struct sockaddr_storage their_addr; // connector's address information
