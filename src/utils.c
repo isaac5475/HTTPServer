@@ -70,8 +70,7 @@ void request_handler(int fd) {
         int content_len_val = -1;
         const char clkey[] = "Content-Length";
         for (int i = 0; i < MAX_HEADERS_AMOUNT && request.headers[i] != NULL; i++) {
-
-            if (strncmp(request.headers[i], clkey, strlen(clkey)) == 0) {
+            if (strncmp(request.headers[i]->key, clkey, strlen(clkey)) == 0) {
                 content_len_val = strtol(request.headers[i]->value, NULL, 10);
                 if (content_len_val == 0) {//Couldn't parse or header == 0, which is invalid behaviou
                     send(fd, STATUS_CODE_400, strlen(STATUS_CODE_400), 0);
@@ -92,20 +91,14 @@ void request_handler(int fd) {
 
 int parse_request(char* msg, struct httpRequest* req) {
     int pos = 0;
-    int method_is_parsed = 
     if (strncmp(msg, "GET", strlen("GET")) == 0) { //   parse method
         pos += strlen("GET");
         req->HTTPMethode = (char *) calloc(1, sizeof("GET"));
         strncpy(req->HTTPMethode, msg, strlen("GET"));
-    } else {
-        req->status = -1;
-        return -1;
-    }
-
-    if (strncmp(msg, "GET", strlen("GET")) == 0) { //   parse method
-        pos += strlen("GET");
-        req->HTTPMethode = (char *) calloc(1, sizeof("GET"));
-        strncpy(req->HTTPMethode, msg, strlen("GET"));
+    } else if (strncmp(msg, "PUT", strlen("PUT")) == 0) {
+        pos += strlen("PUT");
+        req->HTTPMethode = (char *) calloc(1, sizeof("PUT"));
+        strncpy(req->HTTPMethode, msg, strlen("PUT"));
     } else {
         req->status = -1;
         return -1;
@@ -134,18 +127,19 @@ int parse_request(char* msg, struct httpRequest* req) {
         return -1;
     }
     pos += 2;
-    struct header* headers[MAX_HEADERS_AMOUNT];
-    if (parse_headers(msg + pos, headers) == -1) {
+//    struct header* headers = calloc(MAX_HEADERS_AMOUNT, sizeof(struct header*));
+    if (parse_headers(msg + pos, req->headers) == -1) {
         req->status = -1;
         return -1;
     }
+//    req->headers = headers;
 
     return 1;
 
 
 }
 
-int parse_headers(char* msg, struct header* headers[]) {
+int parse_headers(char* msg, struct header** headers) {
     int pos = 0;
     for (int i = 0; i < MAX_HEADERS_AMOUNT; i++) {
        headers[i] = NULL;
@@ -163,9 +157,9 @@ int parse_headers(char* msg, struct header* headers[]) {
         }
         int keyLen = delim - (msg + pos);
         struct header* parsedHeader = calloc(1, sizeof(struct header));
-        parsedHeader->key = calloc(keyLen, sizeof(char));
+        parsedHeader->key = calloc(keyLen+1, sizeof(char));
         strncpy(parsedHeader->key, msg + pos, keyLen);
-        pos += keyLen + 1;
+        pos += keyLen + 2;
 
         char* endOfVal = strchr(msg + pos, '\r');
         if (endOfVal == NULL) {
@@ -174,7 +168,7 @@ int parse_headers(char* msg, struct header* headers[]) {
             return -1;
         }
         int  lenOnVal = endOfVal - (msg + pos);
-        parsedHeader->value = calloc(lenOnVal, sizeof(char));
+        parsedHeader->value = calloc(lenOnVal + 1, sizeof(char));
         strncpy(parsedHeader->value, msg + pos, lenOnVal);
         pos += lenOnVal;
         if (strncmp(msg + pos, crlf, strlen(crlf)) != 0) {
@@ -185,6 +179,8 @@ int parse_headers(char* msg, struct header* headers[]) {
 
         }
         pos += strlen(crlf);
-        headers[headeri++] = parsedHeader;
+        headers[headeri]  = parsedHeader;
+        struct header* nh = headers[headeri];
+        headeri++;
     }
 }
