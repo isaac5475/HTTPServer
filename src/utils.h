@@ -42,4 +42,5 @@ int start_server(char* ipaddr, char* port, int* sockfd);
 void request_handler(int fd);
 int parse_request(char* msg, struct httpRequest* req);
 int parse_headers(char* msg, struct header* headers[]);
+void get_handler(int fd, struct httpRequest *req);
 #endif //RN_PRAXIS_UTILS_H

@@ -63,7 +63,7 @@ void request_handler(int fd) {
     }
 
     if (strncmp(request.HTTPMethode, "GET", strlen("GET")) == 0) {
-        send(fd, STATUS_CODE_404, strlen(STATUS_CODE_404), 0);
+        get_handler(fd, &request);
         return;
     }
     if (strncmp(request.HTTPMethode, "PUT", strlen("PUT")) == 0) {
@@ -86,6 +86,10 @@ void request_handler(int fd) {
     send(fd, STATUS_CODE_501, strlen(STATUS_CODE_501), 0);
     return;
 
+}
+
+void get_handler(int fd, struct httpRequest *req) {
+    send(fd, STATUS_CODE_404, strlen(STATUS_CODE_404), 0);
 }
 
 
