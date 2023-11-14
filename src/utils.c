@@ -60,27 +60,36 @@ void request_handler(int fd, struct llRoot* database) {
         if (recvRes == 0) {
             return;
         }
-        struct httpRequest request;
-        int parse_res = parse_request(msg, &request);
-        if (parse_res == -1) {
+        struct httpRequest* requests[10];
+        int parse_res = parse_requests(msg,  requests);
+        if (parse_res == 0) {
             send(fd, STATUS_CODE_400, strlen(STATUS_CODE_400), 0);
             continue;
         }
+        for (int i = 0; i < parse_res; i++) {
 
-        if (strncmp(request.HTTPMethode, "GET", strlen("GET")) == 0) {
-            get_handler(fd, &request);
-            continue;
-        }
-        if (strncmp(request.HTTPMethode, "PUT", strlen("PUT")) == 0) {
-            put_handler(fd, &request, database);
-            continue;
-        }
-        if (strncmp(request.HTTPMethode, "DELETE", strlen("DELETE")) == 0) {
-            delete_handler(fd, &request, database);
-            continue;
-        }
+            if (parse_res == -1) {
+                send(fd, STATUS_CODE_400, strlen(STATUS_CODE_400), 0);
+                continue;
+            }
 
-        send(fd, STATUS_CODE_501, strlen(STATUS_CODE_501), 0);
+            if (strncmp(requests[i]->HTTPMethode, "GET", strlen("GET")) == 0) {
+                get_handler(fd, requests[i], database);
+                continue;
+            }
+            if (strncmp(requests[i]->HTTPMethode, "PUT", strlen("PUT")) == 0) {
+                put_handler(fd, requests[i], database);
+                continue;
+            }
+            if (strncmp(requests[i]->HTTPMethode, "DELETE", strlen("DELETE")) == 0) {
+                delete_handler(fd, requests[i], database);
+                continue;
+            }
+            send(fd, STATUS_CODE_501, strlen(STATUS_CODE_501), 0);
+            break;
+
+        }
+        return;
     }
 }
 
@@ -199,27 +208,60 @@ int removeFromLLByKey(char* key, size_t keyLen, struct llRoot* start) {
     return -1;
 }
 
-void get_handler(int fd, struct httpRequest *req) {
+void get_handler(int fd, struct httpRequest *req, struct llRoot* database) {
     char foo_url[] = "/static/foo";
     char bar_url[] = "/static/bar";
     char baz_url[] = "/static/baz";
+    char dynamic_url[] = "/dynamic/";
     if (strncmp(req->route, foo_url, strlen(foo_url)) == 0) {
-        char* resp = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\nFoo\r\n";
+        char* resp = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\nFoo";
         send(fd, resp, strlen(resp), 0);
     } else if (strncmp(req->route, bar_url, strlen(bar_url)) == 0) {
-        char* resp = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\nBar\r\n";
+        char* resp = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\nBar";
         send(fd, resp, strlen(resp), 0);
     } else if (strncmp(req->route, baz_url, strlen(baz_url)) == 0) {
-        char* resp = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\nBaz\r\n";
+        char *resp = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\nBaz";
+        send(fd, resp, strlen(resp), 0);
+    } else if (strncmp(req->route, dynamic_url, strlen(dynamic_url)) == 0) {
+      size_t keyLen = strlen(req->route + strlen(dynamic_url));
+      struct entryNode* foundNode = findNodeByKey(database, req->route + strlen(dynamic_url), keyLen);
+      if (foundNode == NULL) {
+          send(fd, STATUS_CODE_404, strlen(STATUS_CODE_404), 0);
+          return;
+      }
+        char resp[512];
+        sprintf(resp, "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\n%s", foundNode->val);
         send(fd, resp, strlen(resp), 0);
     } else {
         send(fd, STATUS_CODE_404, strlen(STATUS_CODE_404), 0);
     }
 }
 
+int parse_requests(char* msg, struct httpRequest* reqs[10]) { //return value - -1 if error, amount of parsed reqs otherw
+    int reqsi = 0;
+    int pos = 0;
+    while (1) {
+        struct httpRequest* parsedReq = calloc(1, sizeof(struct httpRequest));
+        int res = parse_request(msg + pos, parsedReq);
+        if (res == -1) {
+            reqs[reqsi++] = parsedReq;
+            pos++;
+            break;
+        }
+        if (res == 0) {
+            break;
+        }
+        pos += res;
+        reqs[reqsi++] = parsedReq;
+        if (reqsi >= 10) break;
+    }
+    return reqsi;
+}
 
 int parse_request(char* msg, struct httpRequest* req) {
+    req->status = 0;
     int pos = 0;
+    if (strlen(msg) == 0) return 0;
     if (strncmp(msg, "GET", strlen("GET")) == 0) { //   parse method
         pos += strlen("GET");
         req->HTTPMethode = (char *) calloc(1, sizeof("GET"));
@@ -228,7 +270,17 @@ int parse_request(char* msg, struct httpRequest* req) {
         pos += strlen("PUT");
         req->HTTPMethode = (char *) calloc(1, sizeof("PUT"));
         strncpy(req->HTTPMethode, msg, strlen("PUT"));
-    } else {
+    } else if (strncmp(msg, "DELETE", strlen("DELETE")) == 0) {
+        pos += strlen("DELETE");
+        req->HTTPMethode = (char *) calloc(1, sizeof("DELETE"));
+        strncpy(req->HTTPMethode, msg, strlen("DELETE"));
+    } else if (strchr(msg, ' ') != NULL) {
+        int methLen = strchr(msg, ' ') - msg;
+        pos += methLen;
+        req->HTTPMethode = (char *) calloc(1, methLen);
+        strncpy(req->HTTPMethode, msg, methLen);
+    }
+    else {
         req->status = -1;
         return -1;
     }
@@ -265,17 +317,17 @@ int parse_request(char* msg, struct httpRequest* req) {
     pos += headersLen;
     if (strncmp(msg + pos, crlf, strlen(crlf)) == 0) {    //no payload;
         req->payload = NULL;
-        return 1;
+        return pos + strlen(crlf);
     }
     char* endOfPayload = strstr(msg + pos, crlf);
     if (endOfPayload == NULL) {
-        return 1;
+        return -1;
     }
     size_t lenOfPayload = endOfPayload - (msg + pos);
     req->payload = malloc(lenOfPayload);
     strncpy(req->payload, msg + pos, lenOfPayload);
 
-    return 1;
+    return pos + lenOfPayload + strlen(crlf);
 
 
 }
@@ -289,7 +341,7 @@ int parse_headers(char* msg, struct header** headers) {
     int headeri = 0;
     while (1) {
         if (strncmp(msg + pos, crlf, strlen(crlf)) == 0) {
-            return headeri == 0 ? -1 : pos + strlen(crlf);
+            return headeri == 0 ? 0 : pos + strlen(crlf);
         }
 
         char* delim = strchr(msg + pos, ':');

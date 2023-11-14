@@ -46,8 +46,8 @@ int main(int varc, char* argv[])
     struct sigaction sa;
     socklen_t sin_size;
     char s[INET6_ADDRSTRLEN];
-    struct llRoot database;
-    database.start = NULL;
+    struct llRoot *database = mmap(NULL, sizeof(struct llRoot), PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+    database->start = NULL;
 
     start_server(ipaddr, port, &sockfd);
 
@@ -81,7 +81,7 @@ int main(int varc, char* argv[])
 
         if (!fork()) { // this is the child process
             close(sockfd); // child doesn't need the listener
-            request_handler(new_fd, &database);
+            request_handler(new_fd, database);
             close(new_fd);
             kill(getpid(), SIGTERM);
         }

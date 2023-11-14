@@ -9,6 +9,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <sys/mman.h>
 #include <errno.h>
 #include <string.h>
 #include <sys/types.h>
@@ -58,9 +59,10 @@ struct entryNode {
 
 int start_server(char* ipaddr, char* port, int* sockfd);
 void request_handler(int fd, struct llRoot* database);
+int parse_requests(char* msg, struct httpRequest* reqs[10]);
 int parse_request(char* msg, struct httpRequest* req);
 int parse_headers(char* msg, struct header* headers[]);
-void get_handler(int fd, struct httpRequest *req);
+void get_handler(int fd, struct httpRequest *req, struct llRoot* database);
 void put_handler(int fd, struct httpRequest *req, struct llRoot* database);
 void delete_handler(int fd, struct httpRequest *req, struct llRoot* database);
 struct entryNode* findNodeByKey(struct llRoot* start, char* key, size_t len);

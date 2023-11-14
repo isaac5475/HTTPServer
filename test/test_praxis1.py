@@ -7,8 +7,8 @@ from http.client import HTTPConnection
 from util import KillOnExit, randbytes
 
 
-executable = 'build/webserver'
-port = 4711
+executable = '../build/new_target'
+port = 12345
 
 
 def test_execute():
@@ -65,7 +65,8 @@ def test_packets():
         time.sleep(.5)
         conn.send('\r\n'.encode())
         time.sleep(.5)  # Attempt to gracefully handle all kinds of multi-packet replies...
-        replies = conn.recv(1024).split(b'\r\n\r\n')
+        msg = conn.recv(1024)
+        replies = msg.split(b'\r\n\r\n')
         assert replies[0] and replies[1] and not replies[2]
 
 
