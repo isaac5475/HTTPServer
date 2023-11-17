@@ -19,6 +19,7 @@
 #include <arpa/inet.h>
 #include <sys/wait.h>
 #include <signal.h>
+#include "sys/shm.h"
 
 #define REQUEST_LEN 256
 #define MAX_HEADERS_AMOUNT 10
@@ -51,21 +52,20 @@ struct llRoot {
 };
 
 struct entryNode {
-    struct entryNode* next;
-    char* key;
-    char* val;
+    char key[16];
+    char val[16];
 };
 
 
 int start_server(char* ipaddr, char* port, int* sockfd);
-void request_handler(int fd, struct llRoot* database);
+void request_handler(int fd, int shmid);
 int parse_requests(char* msg, struct httpRequest* reqs[10]);
 int parse_request(char* msg, struct httpRequest* req);
 int parse_headers(char* msg, struct header* headers[]);
-void get_handler(int fd, struct httpRequest *req, struct llRoot* database);
-void put_handler(int fd, struct httpRequest *req, struct llRoot* database);
-void delete_handler(int fd, struct httpRequest *req, struct llRoot* database);
-struct entryNode* findNodeByKey(struct llRoot* start, char* key, size_t len);
-int saveInLL(struct llRoot* start, char* key, size_t key_len, char* val, size_t val_len);
-int removeFromLLByKey(char* key, size_t keyLen, struct llRoot* start);
+void get_handler(int fd, struct httpRequest *req, int shmid);
+void put_handler(int fd, struct httpRequest *req, int shmid);
+void delete_handler(int fd, struct httpRequest *req, int shmid);
+struct entryNode* findNodeByKey(int shmid, char* key, size_t len);
+int saveInLL(int shmid, char* key, size_t key_len, char* val, size_t val_len);
+int removeFromLLByKey(int shmid, char* key, size_t keyLen);
 #endif //RN_PRAXIS_UTILS_H

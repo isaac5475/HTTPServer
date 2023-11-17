@@ -4,6 +4,7 @@
 
 #include "main.h"
 #include "utils.h"
+
 /*
 ** server.c -- a stream socket server demo
 */
@@ -11,6 +12,18 @@
 
 
 #define BACKLOG 10   // how many pending connections queue will hold
+const int SHM_SIZE = 1024;
+
+
+int init_shared_memory() {
+    int shmid;
+    key_t key = ftok("shm_key", 'R');
+    shmid = shmget(key, SHM_SIZE, IPC_CREAT | 0666);
+    if (shmid == -1) {
+        exit(1);
+    }
+    return shmid;
+}
 
 void sigchld_handler(int s)
 {
@@ -46,8 +59,18 @@ int main(int varc, char* argv[])
     struct sigaction sa;
     socklen_t sin_size;
     char s[INET6_ADDRSTRLEN];
-    struct llRoot *database = mmap(NULL, sizeof(struct llRoot), PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
-    database->start = NULL;
+
+    int shmid = init_shared_memory();
+
+    void* shm = shmat(shmid, NULL, 0);
+    memset(shm, 0, 1024);
+    if (shm == (void*)-1) {
+        perror("shmat");
+        exit(1);
+    }
+    if (shmdt(shm) == -1) {
+        exit(1);
+    }
 
     start_server(ipaddr, port, &sockfd);
 
@@ -81,7 +104,7 @@ int main(int varc, char* argv[])
 
         if (!fork()) { // this is the child process
             close(sockfd); // child doesn't need the listener
-            request_handler(new_fd, database);
+            request_handler(new_fd, shmid);
             close(new_fd);
             kill(getpid(), SIGTERM);
         }

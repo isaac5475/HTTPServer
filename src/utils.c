@@ -49,7 +49,7 @@ int start_server(char* ipaddr, char* port, int* sockfd) {
     }
 }
 
-void request_handler(int fd, struct llRoot* database) {
+void request_handler(int fd, int shmid) {
     while (1) {
         char msg[REQUEST_LEN];
         memset(msg, 0, REQUEST_LEN);
@@ -74,15 +74,15 @@ void request_handler(int fd, struct llRoot* database) {
             }
 
             if (strncmp(requests[i]->HTTPMethode, "GET", strlen("GET")) == 0) {
-                get_handler(fd, requests[i], database);
+                get_handler(fd, requests[i], shmid);
                 continue;
             }
             if (strncmp(requests[i]->HTTPMethode, "PUT", strlen("PUT")) == 0) {
-                put_handler(fd, requests[i], database);
+                put_handler(fd, requests[i], shmid);
                 continue;
             }
             if (strncmp(requests[i]->HTTPMethode, "DELETE", strlen("DELETE")) == 0) {
-                delete_handler(fd, requests[i], database);
+                delete_handler(fd, requests[i], shmid);
                 continue;
             }
             send(fd, STATUS_CODE_501, strlen(STATUS_CODE_501), 0);
@@ -93,7 +93,7 @@ void request_handler(int fd, struct llRoot* database) {
     }
 }
 
-void put_handler(int fd, struct httpRequest *req, struct llRoot* database) {
+void put_handler(int fd, struct httpRequest *req, int shmid) {
     int content_len_val = -1;
     const char clkey[] = "Content-Length";
     for (int i = 0; i < MAX_HEADERS_AMOUNT && req->headers[i] != NULL; i++) {
@@ -115,9 +115,10 @@ void put_handler(int fd, struct httpRequest *req, struct llRoot* database) {
         pos += strlen(dynamicRoute);
         int rest = req->routeLen - strlen((dynamicRoute));
         char* key = req->route + pos;
-        struct entryNode* existingNode = findNodeByKey(database, key, rest);
+        void* shm = shmat(shmid, NULL, 0);
+        struct entryNode* existingNode = findNodeByKey(shmid, key, rest);
         if (existingNode == NULL) {
-            saveInLL(database, key, rest, req->payload, strlen(req->payload));
+            saveInLL(shmid, key, rest, req->payload, strlen(req->payload));
             send(fd, STATUS_CODE_201, strlen(STATUS_CODE_201), 0);
             return;
         }
@@ -131,14 +132,16 @@ void put_handler(int fd, struct httpRequest *req, struct llRoot* database) {
     }
 }
 
-void delete_handler(int fd, struct httpRequest *req, struct llRoot* database) {
+void delete_handler(int fd, struct httpRequest *req, int shmid) {
     int pos = 0;
     const char dynamicRoute[] = "/dynamic/";
     if (strncmp(req->route, dynamicRoute, strlen(dynamicRoute)) == 0) {
         pos += strlen(dynamicRoute);
         int rest = req->routeLen - strlen((dynamicRoute));
         char *key = req->route + pos;
-        int res = removeFromLLByKey(key, rest, database);
+        void* shm = shmat(shmid, NULL, 0);
+        struct llRot* start = (struct llRoot*) shm + sizeof(int);
+        int res = removeFromLLByKey(shmid, key, rest);
         if (res == -1) {
             send(fd, STATUS_CODE_404, strlen(STATUS_CODE_404), 0);
             return;
@@ -149,8 +152,10 @@ void delete_handler(int fd, struct httpRequest *req, struct llRoot* database) {
     }
 }
 
-struct entryNode* findNodeByKey(struct llRoot* start, char* key, size_t len) {
-    for (struct entryNode* i = start->start; i != NULL; i = i->next) {
+struct entryNode* findNodeByKey(int shmid, char* key, size_t len) {
+    void* shm = shmat(shmid, NULL, 0);
+    int amountOfEntries = (int)shm;
+    for (struct entryNode* i = shm; i < shm + amountOfEntries * sizeof(struct entryNode); i++) {
         if (strncmp(key, i->key, len) == 0) {
             return i;
         }
