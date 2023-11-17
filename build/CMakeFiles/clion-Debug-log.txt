@@ -1,0 +1,10 @@
+/home/murat/.cache/JetBrains/RemoteDev/dist/2203e709e1a54_CLion-233.11555.2/bin/cmake/linux/x64/bin/cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_MAKE_PROGRAM=/home/murat/.cache/JetBrains/RemoteDev/dist/2203e709e1a54_CLion-233.11555.2/bin/ninja/linux/x64/ninja CMAKE_BUILD_TYPE=Debug -G Ninja -S /home/murat/TKN23/rn-praxis -B /home/murat/TKN23/rn-praxis/build
+CMake Warning:
+  Ignoring extra path from command line:
+
+   "/home/murat/TKN23/rn-praxis/build/CMAKE_BUILD_TYPE=Debug"
+
+
+-- Configuring done (0.0s)
+-- Generating done (0.0s)
+-- Build files have been written to: /home/murat/TKN23/rn-praxis/build
