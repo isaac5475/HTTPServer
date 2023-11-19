@@ -29,6 +29,8 @@
 #define STATUS_CODE_201 "HTTP/1.1 201 Created\r\n\r\n"
 #define STATUS_CODE_204 "HTTP/1.1 204 No Content\r\n\r\n"
 #define STATUS_CODE_403 "HTTP/1.1 403 Forbidden\r\n\r\n"
+#define STATUS_REPLY "Reply\r\n\r\n"
+#define MAX_HEADERS_AMOUNT 10
 
 #define HTTP_VERSION "HTTP/1.1"
 
@@ -42,7 +44,7 @@ struct httpRequest {
     char* route;
     int routeLen;
     char* HTTPVersion;
-    struct header* headers[10];
+    struct header* headers[MAX_HEADERS_AMOUNT];
     char* payload;
     int status;
 };
@@ -58,14 +60,15 @@ struct entryNode {
 
 
 int start_server(char* ipaddr, char* port, int* sockfd);
-void request_handler(int fd, int shmid);
+void request_handler(int fd);
 int parse_requests(char* msg, struct httpRequest* reqs[10]);
 int parse_request(char* msg, struct httpRequest* req);
 int parse_headers(char* msg, struct header* headers[]);
-void get_handler(int fd, struct httpRequest *req, int shmid);
-void put_handler(int fd, struct httpRequest *req, int shmid);
-void delete_handler(int fd, struct httpRequest *req, int shmid);
-struct entryNode* findNodeByKey(int shmid, char* key, size_t len);
-int saveInLL(int shmid, char* key, size_t key_len, char* val, size_t val_len);
-int removeFromLLByKey(int shmid, char* key, size_t keyLen);
+void get_handler(int fd, struct httpRequest *req);
+void put_handler(int fd, struct httpRequest *req);
+void delete_handler(int fd, struct httpRequest *req);
+char* read_dynamic_record(char* requestedRoute);
+int add_dynamic_record(char* requestedRoute, char* payload);
+int delete_dynamic_record(char* requestedRoute);
+void free_httpRequest(struct httpRequest* req);
 #endif //RN_PRAXIS_UTILS_H

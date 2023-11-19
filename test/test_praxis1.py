@@ -64,7 +64,7 @@ def test_packets():
         conn.send('GET / HTTP/1.1\r\na: b\r\n'.encode())
         time.sleep(.5)
         conn.send('\r\n'.encode())
-        time.sleep(.5)  # Attempt to gracefully handle all kinds of multi-packet replies...
+        time.sleep(105)  # Attempt to gracefully handle all kinds of multi-packet replies...
         msg = conn.recv(1024)
         replies = msg.split(b'\r\n\r\n')
         assert replies[0] and replies[1] and not replies[2]

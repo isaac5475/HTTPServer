@@ -104,12 +104,13 @@ int main(int varc, char* argv[])
 
         if (!fork()) { // this is the child process
             close(sockfd); // child doesn't need the listener
-            request_handler(new_fd, shmid);
-            close(new_fd);
+            request_handler(new_fd);
             kill(getpid(), SIGTERM);
+            close(new_fd);
         }
         close(new_fd);  // parent doesn't need this
     }
 
     return 0;
 }
+

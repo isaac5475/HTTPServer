@@ -49,8 +49,8 @@ int start_server(char* ipaddr, char* port, int* sockfd) {
     }
 }
 
-void request_handler(int fd, int shmid) {
-    while (1) {
+void request_handler(int fd) {
+    while (1) { //Connection remains open until closed client-side
         char msg[REQUEST_LEN];
         memset(msg, 0, REQUEST_LEN);
         int recvRes = recv(fd, msg, REQUEST_LEN, 0);
@@ -60,7 +60,7 @@ void request_handler(int fd, int shmid) {
         if (recvRes == 0) {
             return;
         }
-        struct httpRequest* requests[10];
+        struct httpRequest** requests = calloc(10, sizeof(struct httpRequest*));
         int parse_res = parse_requests(msg,  requests);
         if (parse_res == 0) {
             send(fd, STATUS_CODE_400, strlen(STATUS_CODE_400), 0);
@@ -68,32 +68,35 @@ void request_handler(int fd, int shmid) {
         }
         for (int i = 0; i < parse_res; i++) {
 
-            if (parse_res == -1) {
+            if (requests[i]->status == -1) {
                 send(fd, STATUS_CODE_400, strlen(STATUS_CODE_400), 0);
+                free_httpRequest((requests[i]));
                 continue;
             }
 
             if (strncmp(requests[i]->HTTPMethode, "GET", strlen("GET")) == 0) {
-                get_handler(fd, requests[i], shmid);
+                get_handler(fd, requests[i]);
+                free_httpRequest((requests[i]));
                 continue;
             }
             if (strncmp(requests[i]->HTTPMethode, "PUT", strlen("PUT")) == 0) {
-                put_handler(fd, requests[i], shmid);
+                put_handler(fd, requests[i]);
+                free_httpRequest((requests[i]));
                 continue;
             }
             if (strncmp(requests[i]->HTTPMethode, "DELETE", strlen("DELETE")) == 0) {
-                delete_handler(fd, requests[i], shmid);
+                delete_handler(fd, requests[i]);
+                free_httpRequest((requests[i]));
                 continue;
             }
             send(fd, STATUS_CODE_501, strlen(STATUS_CODE_501), 0);
-            break;
-
+            free_httpRequest(requests[i]);
         }
-        return;
+        free(requests);
     }
 }
 
-void put_handler(int fd, struct httpRequest *req, int shmid) {
+void put_handler(int fd, struct httpRequest *req) {
     int content_len_val = -1;
     const char clkey[] = "Content-Length";
     for (int i = 0; i < MAX_HEADERS_AMOUNT && req->headers[i] != NULL; i++) {
@@ -113,35 +116,23 @@ void put_handler(int fd, struct httpRequest *req, int shmid) {
     char dynamicRoute[] = "/dynamic/";
     if (strncmp(req->route, dynamicRoute, strlen(dynamicRoute)) == 0) {
         pos += strlen(dynamicRoute);
-        int rest = req->routeLen - strlen((dynamicRoute));
-        char* key = req->route + pos;
-        void* shm = shmat(shmid, NULL, 0);
-        struct entryNode* existingNode = findNodeByKey(shmid, key, rest);
-        if (existingNode == NULL) {
-            saveInLL(shmid, key, rest, req->payload, strlen(req->payload));
+        int res = add_dynamic_record(req->route + strlen("/dynamic/"), req->payload);
+        if (res == 1) {
             send(fd, STATUS_CODE_201, strlen(STATUS_CODE_201), 0);
             return;
+        } else if (res == 0) {    //overriden
+            send(fd, STATUS_CODE_204, strlen(STATUS_CODE_204), 0);
         }
-        free(existingNode->val);
-        calloc(strlen(req->payload), 1);
-        strncpy(existingNode->val, req->payload, strlen(req->payload));
-        send(fd, STATUS_CODE_204, strlen(STATUS_CODE_204), 0);
         return;
     } else {
         send(fd, STATUS_CODE_403, strlen(STATUS_CODE_403), 0);
     }
 }
 
-void delete_handler(int fd, struct httpRequest *req, int shmid) {
-    int pos = 0;
+void delete_handler(int fd, struct httpRequest *req) {
     const char dynamicRoute[] = "/dynamic/";
     if (strncmp(req->route, dynamicRoute, strlen(dynamicRoute)) == 0) {
-        pos += strlen(dynamicRoute);
-        int rest = req->routeLen - strlen((dynamicRoute));
-        char *key = req->route + pos;
-        void* shm = shmat(shmid, NULL, 0);
-        struct llRot* start = (struct llRoot*) shm + sizeof(int);
-        int res = removeFromLLByKey(shmid, key, rest);
+        int res = delete_dynamic_record(req->route + strlen("/dynamic/"));
         if (res == -1) {
             send(fd, STATUS_CODE_404, strlen(STATUS_CODE_404), 0);
             return;
@@ -152,68 +143,9 @@ void delete_handler(int fd, struct httpRequest *req, int shmid) {
     }
 }
 
-struct entryNode* findNodeByKey(int shmid, char* key, size_t len) {
-    void* shm = shmat(shmid, NULL, 0);
-    int amountOfEntries = (int)shm;
-    for (struct entryNode* i = shm; i < shm + amountOfEntries * sizeof(struct entryNode); i++) {
-        if (strncmp(key, i->key, len) == 0) {
-            return i;
-        }
-    }
-    return NULL;
-}
-int saveInLL(struct llRoot* start, char* key, size_t key_len, char* val, size_t val_len) {
-    struct entryNode* newNode = calloc(1, sizeof(struct entryNode));
-    newNode->next = NULL;
-    newNode->key = calloc(1, key_len);
-    strncpy(newNode->key, key, key_len);
-    newNode->val = calloc(1, val_len);
-    strncpy(newNode->val, val, val_len);
 
-    if (start->start == NULL) {
-        start->start = newNode;
-        return 1;
-    }
 
-    struct entryNode* t1 = start->start;
-    struct entryNode* t2;
-    while (t1 != NULL) {
-        t2 = t1;
-        t1 = t1->next;
-    }
-    t2->next = newNode;
-    return 1;
-}
-
-int removeFromLLByKey(char* key, size_t keyLen, struct llRoot* start) {
-    if (strncmp(start->start->key, key, keyLen) == 0) {
-        struct entryNode* t3 = start->start->next;
-        free(start->start->key);
-        free(start->start->val);
-        free(start->start);
-        start->start = t3;
-        return 1;
-    }
-
-    struct entryNode* t1, *t2;
-    t1 = start->start;
-
-    while(t1->next != NULL) {
-      t2 = t1;
-      t1 = t1->next;
-      if (strncmp(t1->key, key, keyLen) == 0) {
-          struct entryNode* t3 = t1->next;
-          free(t1->key);
-          free(t1->val);
-          free(t1);
-          t2->next = t3;
-          return 1;
-      }
-    }
-    return -1;
-}
-
-void get_handler(int fd, struct httpRequest *req, struct llRoot* database) {
+void get_handler(int fd, struct httpRequest *req) {
     char foo_url[] = "/static/foo";
     char bar_url[] = "/static/bar";
     char baz_url[] = "/static/baz";
@@ -229,23 +161,75 @@ void get_handler(int fd, struct httpRequest *req, struct llRoot* database) {
         send(fd, resp, strlen(resp), 0);
     } else if (strncmp(req->route, dynamic_url, strlen(dynamic_url)) == 0) {
       size_t keyLen = strlen(req->route + strlen(dynamic_url));
-      struct entryNode* foundNode = findNodeByKey(database, req->route + strlen(dynamic_url), keyLen);
-      if (foundNode == NULL) {
-          send(fd, STATUS_CODE_404, strlen(STATUS_CODE_404), 0);
+      char* payload = read_dynamic_record(req->route + sizeof("/dynamic"));
+      char resp[REQUEST_LEN];
+      if (payload == NULL) {
+          sprintf(resp, "HTTP/1.1 404 NOT FOUND\r\n\r\n");
+          send(fd,resp, strlen(resp), 0);
           return;
       }
-        char resp[512];
-        sprintf(resp, "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\n%s", foundNode->val);
+        sprintf(resp, "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %d\r\n%s", (int)strlen(payload), payload);
         send(fd, resp, strlen(resp), 0);
+        free(payload);
     } else {
         send(fd, STATUS_CODE_404, strlen(STATUS_CODE_404), 0);
     }
 }
 
+char* read_dynamic_record(char* requestedRoute) {
+    char dir[32];
+    sprintf(dir, "dynamic/%s.txt", requestedRoute);
+    if (access(dir, F_OK) == -1) { //resource doesn't exist
+        return NULL;
+    }
+    FILE *file = fopen(dir, "r");
+    if (file == NULL) {
+        return NULL;
+    }
+    int size;
+    fseek(file, 0, SEEK_END);
+
+    // Get the position, which is the size of the file
+    size = ftell(file);
+
+    // Restore the position
+    fseek(file, 0, SEEK_SET);
+    char* payload = calloc(1, size + 1);
+    fgets(payload, size+1, file);
+    fclose(file);
+    return payload;
+}
+
+int add_dynamic_record(char* requestedRoute, char* payload) {
+    char dir[32];
+    sprintf(dir, "dynamic/%s.txt", requestedRoute);
+    if (access(dir, F_OK) == -1) { //resource doesn't exist
+        FILE *file = fopen(dir, "w");
+        if (file == NULL) return -1;
+        fprintf(file, "%s", payload);
+        fclose(file);
+        return 1;
+    } else {    //file already exists, rewrite
+        FILE *file = fopen(dir, "w");
+        if (file == NULL) {
+            return -1;
+        }
+        fprintf(file, "%s", payload);
+        fclose(file);
+        return 0;
+    }
+}
+
+int delete_dynamic_record(char * requestedRoute) {
+    char dir[32];
+    sprintf(dir, "dynamic/%s.txt", requestedRoute);
+    return remove(dir);
+}
+
 int parse_requests(char* msg, struct httpRequest* reqs[10]) { //return value - -1 if error, amount of parsed reqs otherw
     int reqsi = 0;
     int pos = 0;
-    while (1) {
+    while (reqsi < 10) {
         struct httpRequest* parsedReq = calloc(1, sizeof(struct httpRequest));
         int res = parse_request(msg + pos, parsedReq);
         if (res == -1) {
@@ -258,7 +242,6 @@ int parse_requests(char* msg, struct httpRequest* reqs[10]) { //return value - -
         }
         pos += res;
         reqs[reqsi++] = parsedReq;
-        if (reqsi >= 10) break;
     }
     return reqsi;
 }
@@ -284,8 +267,7 @@ int parse_request(char* msg, struct httpRequest* req) {
         pos += methLen;
         req->HTTPMethode = (char *) calloc(1, methLen);
         strncpy(req->HTTPMethode, msg, methLen);
-    }
-    else {
+    } else {
         req->status = -1;
         return -1;
     }
@@ -300,7 +282,7 @@ int parse_request(char* msg, struct httpRequest* req) {
     pos += 1; // ' '
 
     const char httpVersion[] = "HTTP/1.1";
-    if (strncmp(msg + pos, httpVersion, strlen(httpVersion)) == 0) { //   parse method
+    if (strncmp(msg + pos, httpVersion, strlen(httpVersion)) == 0) {
         req->HTTPVersion = (char *) calloc(1, sizeof(httpVersion));
         strncpy(req->HTTPVersion, msg + pos, strlen(httpVersion));
         pos += strlen(httpVersion);
@@ -313,26 +295,45 @@ int parse_request(char* msg, struct httpRequest* req) {
         req->status = -1;
         return -1;
     }
-    pos += 2;
+    pos += strlen("\r\n");
     int headersLen = parse_headers(msg + pos, req->headers);
     if ( headersLen == -1) {
         req->status = -1;
         return -1;
     }
     pos += headersLen;
-    if (strncmp(msg + pos, crlf, strlen(crlf)) == 0) {    //no payload;
-        req->payload = NULL;
-        return pos + strlen(crlf);
+    req->payload = NULL;
+    if (strncmp(req->HTTPMethode, "PUT", 3) != 0) {
+        return pos;
     }
-    char* endOfPayload = strstr(msg + pos, crlf);
-    if (endOfPayload == NULL) {
-        return -1;
-    }
-    size_t lenOfPayload = endOfPayload - (msg + pos);
-    req->payload = malloc(lenOfPayload);
-    strncpy(req->payload, msg + pos, lenOfPayload);
 
-    return pos + lenOfPayload + strlen(crlf);
+    int contentLen = -1;
+    for (int i = 0; i < 10 && req->headers[i] != NULL; i++) {
+        if (strncmp(req->headers[i]->key, "Content-Length", strlen("Content-Length")) == 0) {
+            contentLen = atoi(req->headers[i]->value);
+            break;
+        }
+    }
+    if (contentLen == -1) {
+        req->status = -1;
+        return pos;
+    }
+    req->payload = calloc(contentLen + 1, sizeof(char));
+    strncpy(req->payload, msg+pos, contentLen);
+    return pos + contentLen;
+//    if (strncmp(msg + pos, crlf, strlen(crlf)) == 0) {    //no payload;
+//        req->payload = NULL;
+//        return pos + strlen(crlf);
+//    }
+//    char* endOfPayload = strstr(msg + pos, crlf);
+//    if (endOfPayload == NULL) {
+//        return -1;
+//    }
+//    size_t lenOfPayload = endOfPayload - (msg + pos);
+//    req->payload = malloc(lenOfPayload);
+//    strncpy(req->payload, msg + pos, lenOfPayload);
+
+//    return pos + payloadLen + strlen(crlf);
 
 
 }
@@ -346,7 +347,7 @@ int parse_headers(char* msg, struct header** headers) {
     int headeri = 0;
     while (1) {
         if (strncmp(msg + pos, crlf, strlen(crlf)) == 0) {
-            return headeri == 0 ? 0 : pos + strlen(crlf);
+            return pos + strlen(crlf);
         }
 
         char* delim = strchr(msg + pos, ':');
@@ -380,4 +381,17 @@ int parse_headers(char* msg, struct header** headers) {
         headers[headeri]  = parsedHeader;
         headeri++;
     }
+}
+
+void free_httpRequest(struct httpRequest* req) {
+    free(req->HTTPMethode);
+    free(req->route);
+    free(req->payload);
+    for (int i= 0; req->headers[i] != NULL; i++) {
+        free(req->headers[i]->key);
+        free(req->headers[i]->value);
+        free(req->headers[i]);
+    }
+
+    free(req);
 }
