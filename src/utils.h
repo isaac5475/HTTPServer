@@ -26,6 +26,7 @@
 #define STATUS_CODE_400 "HTTP/1.1 400 Bad Request\r\n\r\n"
 #define STATUS_CODE_404 "HTTP/1.1 404 Not Found\r\n\r\n"
 #define STATUS_CODE_501 "HTTP/1.1 501 Not Implemented\r\n\r\n"
+#define STATUS_CODE_200 "HTTP/1.1 200 OK\r\n\r\n"
 #define STATUS_CODE_201 "HTTP/1.1 201 Created\r\n\r\n"
 #define STATUS_CODE_204 "HTTP/1.1 204 No Content\r\n\r\n"
 #define STATUS_CODE_403 "HTTP/1.1 403 Forbidden\r\n\r\n"
@@ -47,15 +48,6 @@ struct httpRequest {
     struct header* headers[MAX_HEADERS_AMOUNT];
     char* payload;
     int status;
-};
-
-struct llRoot {
-    struct entryNode* start;
-};
-
-struct entryNode {
-    char key[16];
-    char val[16];
 };
 
 

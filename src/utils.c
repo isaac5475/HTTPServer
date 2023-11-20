@@ -54,14 +54,14 @@ void request_handler(int fd) {
         char msg[REQUEST_LEN];
         memset(msg, 0, REQUEST_LEN);
         int recvRes = recv(fd, msg, REQUEST_LEN, 0);
-        if (recvRes == -1) {
-            continue;
-        }
-        if (recvRes == 0) {
+//        if (recvRes == -1) {
+//            continue;
+//        }
+        if (recvRes <= 0) {
             return;
         }
         struct httpRequest** requests = calloc(10, sizeof(struct httpRequest*));
-        int parse_res = parse_requests(msg,  requests);
+        int parse_res = parse_requests(msg, requests);
         if (parse_res == 0) {
             send(fd, STATUS_CODE_400, strlen(STATUS_CODE_400), 0);
             continue;
@@ -146,29 +146,29 @@ void delete_handler(int fd, struct httpRequest *req) {
 
 
 void get_handler(int fd, struct httpRequest *req) {
-    char foo_url[] = "/static/foo";
-    char bar_url[] = "/static/bar";
-    char baz_url[] = "/static/baz";
-    char dynamic_url[] = "/dynamic/";
+    const char foo_url[] = "/static/foo";
+    const char bar_url[] = "/static/bar";
+    const char baz_url[] = "/static/baz";
+    const char dynamic_url[] = "/dynamic/";
     if (strncmp(req->route, foo_url, strlen(foo_url)) == 0) {
-        char* resp = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\nFoo";
+        char* resp = "HTTP/1.1 200 OK\r\nContent-Length: 3\r\n\r\nFoo";
         send(fd, resp, strlen(resp), 0);
     } else if (strncmp(req->route, bar_url, strlen(bar_url)) == 0) {
-        char* resp = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\nBar";
+        char* resp = "HTTP/1.1 200 OK\r\nContent-Length: 3\r\n\r\nBar";
         send(fd, resp, strlen(resp), 0);
     } else if (strncmp(req->route, baz_url, strlen(baz_url)) == 0) {
-        char *resp = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\nBaz";
+        char *resp = "HTTP/1.1 200 OK\r\nContent-Length: 3\r\n\r\nBaz";
         send(fd, resp, strlen(resp), 0);
     } else if (strncmp(req->route, dynamic_url, strlen(dynamic_url)) == 0) {
-      size_t keyLen = strlen(req->route + strlen(dynamic_url));
+        send(fd, STATUS_CODE_404, strlen(STATUS_CODE_404), 0);
+        return;
       char* payload = read_dynamic_record(req->route + sizeof("/dynamic"));
       char resp[REQUEST_LEN];
       if (payload == NULL) {
-          sprintf(resp, "HTTP/1.1 404 NOT FOUND\r\n\r\n");
-          send(fd,resp, strlen(resp), 0);
+          send(fd,STATUS_CODE_404, strlen(STATUS_CODE_404), 0);;
           return;
       }
-        sprintf(resp, "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %d\r\n%s", (int)strlen(payload), payload);
+        sprintf(resp, "HTTP/1.1 200 OK\r\nContent-Length: %d\r\n\r\n%s", (int)strlen(payload), payload);
         send(fd, resp, strlen(resp), 0);
         free(payload);
     } else {

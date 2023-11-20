@@ -15,15 +15,6 @@
 const int SHM_SIZE = 1024;
 
 
-int init_shared_memory() {
-    int shmid;
-    key_t key = ftok("shm_key", 'R');
-    shmid = shmget(key, SHM_SIZE, IPC_CREAT | 0666);
-    if (shmid == -1) {
-        exit(1);
-    }
-    return shmid;
-}
 
 void sigchld_handler(int s)
 {
@@ -60,17 +51,7 @@ int main(int varc, char* argv[])
     socklen_t sin_size;
     char s[INET6_ADDRSTRLEN];
 
-    int shmid = init_shared_memory();
 
-    void* shm = shmat(shmid, NULL, 0);
-    memset(shm, 0, 1024);
-    if (shm == (void*)-1) {
-        perror("shmat");
-        exit(1);
-    }
-    if (shmdt(shm) == -1) {
-        exit(1);
-    }
 
     start_server(ipaddr, port, &sockfd);
 
