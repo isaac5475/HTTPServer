@@ -33,8 +33,15 @@
 #define STATUS_REPLY "Reply\r\n\r\n"
 #define MAX_HEADERS_AMOUNT 10
 #define MAX_DIR_NAME 128
+#define MAX_RESOURCES_AMOUNT 40
+#define DYNAMIC_ROUTE "/dynamic/"
 
 #define HTTP_VERSION "HTTP/1.1"
+
+struct dynamicResource {
+    char* key;
+    char* value;
+};
 
 struct header {
     char* key;
@@ -53,16 +60,16 @@ struct httpRequest {
 
 
 int start_server(char* ipaddr, char* port, int* sockfd);
-void request_handler(int fd, char* msgPrefix);
+void request_handler(int fd, char* msgPrefix, struct dynamicResource* dynamicResources[MAX_RESOURCES_AMOUNT]);
 int parse_requests(char* msg, struct httpRequest* reqs[10], int* position);
 int parse_request(char* msg, struct httpRequest* req);
 int parse_headers(char* msg, struct header* headers[]);
-void get_handler(int fd, struct httpRequest *req);
-void put_handler(int fd, struct httpRequest *req);
-void delete_handler(int fd, struct httpRequest *req);
-char* read_dynamic_record(char* requestedRoute);
-int add_dynamic_record(char* requestedRoute, char* payload);
-int delete_dynamic_record(char* requestedRoute);
+void get_handler(int fd, struct httpRequest *req, struct dynamicResource* dynamicResources[MAX_RESOURCES_AMOUNT]);
+void put_handler(int fd, struct httpRequest *req, struct dynamicResource* dynamicResources[MAX_RESOURCES_AMOUNT]);
+void delete_handler(int fd, struct httpRequest *req, struct dynamicResource* dynamicResources[MAX_RESOURCES_AMOUNT]);
+char* read_dynamic_record(char* requestedRoute, struct dynamicResource* dynamicResources[MAX_RESOURCES_AMOUNT]);
+int add_dynamic_record(char* requestedRoute, char* payload, struct dynamicResource* dynamicResources[MAX_RESOURCES_AMOUNT]);
+int delete_dynamic_record(char* requestedRoute, struct dynamicResource* dynamicResources[MAX_RESOURCES_AMOUNT]);
 void free_httpRequest(struct httpRequest* req);
 char* append_strings(char* str1, char* str2);
 #endif //RN_PRAXIS_UTILS_H

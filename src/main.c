@@ -50,6 +50,8 @@ int main(int varc, char* argv[])
     struct sigaction sa;
     socklen_t sin_size;
     char s[INET6_ADDRSTRLEN];
+    struct dynamicResource* dynamicResources[MAX_RESOURCES_AMOUNT];
+    memset(dynamicResources, 0, MAX_RESOURCES_AMOUNT * sizeof(struct  dynamicResource*));
 
 
 
@@ -88,7 +90,7 @@ int main(int varc, char* argv[])
 //            close(sockfd); // child doesn't need the listener
             char msgPrefix[REQUEST_LEN];
             memset(msgPrefix, 0, REQUEST_LEN);
-            request_handler(new_fd, msgPrefix);
+            request_handler(new_fd, msgPrefix, dynamicResources);
             close(new_fd);
 //            printf("closing connection");
 //            kill(getpid(), SIGTERM);

@@ -49,7 +49,7 @@ int start_server(char* ipaddr, char* port, int* sockfd) {
     }
 }
 
-void request_handler(int fd, char* msgPrefix) {
+void request_handler(int fd, char* msgPrefix, struct dynamicResource* dynamicResources[MAX_RESOURCES_AMOUNT]) {
     while (1) { //Connection remains open until closed client-side
         char msgBuf[REQUEST_LEN];
         memset(msgBuf, 0, REQUEST_LEN);
@@ -85,17 +85,17 @@ void request_handler(int fd, char* msgPrefix) {
             }
 
             if (strncmp(requests[i]->HTTPMethode, "GET", strlen("GET")) == 0) {
-                get_handler(fd, requests[i]);
+                get_handler(fd, requests[i], dynamicResources);
                 free_httpRequest((requests[i]));
                 continue;
             }
             if (strncmp(requests[i]->HTTPMethode, "PUT", strlen("PUT")) == 0) {
-                put_handler(fd, requests[i]);
+                put_handler(fd, requests[i], dynamicResources);
                 free_httpRequest((requests[i]));
                 continue;
             }
             if (strncmp(requests[i]->HTTPMethode, "DELETE", strlen("DELETE")) == 0) {
-                delete_handler(fd, requests[i]);
+                delete_handler(fd, requests[i], dynamicResources);
                 free_httpRequest((requests[i]));
                 continue;
             }
@@ -107,13 +107,7 @@ void request_handler(int fd, char* msgPrefix) {
     }
 }
 
-void put_handler(int fd, struct httpRequest *req) {
-//    printf("starting sending...\r\n");
-//    char* resp = "HTTP/1.1 201 Created\r\n\r\n";
-//    int b =send(fd,resp, strlen(resp), 0);
-//    send(fd, STATUS_CODE_201, strlen(STATUS_CODE_201) + 1, 0);
-//    shutdown(fd, SHUT_WR);
-//    return;
+void put_handler(int fd, struct httpRequest *req, struct dynamicResource* dynamicResources[MAX_RESOURCES_AMOUNT]) {
     int content_len_val = -1;
     const char clkey[] = "Content-Length";
     for (int i = 0; i < MAX_HEADERS_AMOUNT && req->headers[i] != NULL; i++) {
@@ -130,24 +124,14 @@ void put_handler(int fd, struct httpRequest *req) {
         shutdown(fd, SHUT_WR);
         return;
     }
-    int pos = 0;
-    char dynamicRoute[] = "/dynamic/";
-    if (strncmp(req->route, dynamicRoute, strlen(dynamicRoute)) == 0) {
-        pos += strlen(dynamicRoute);
-        int res = add_dynamic_record(req->route + strlen("/dynamic/"), req->payload);
-
-        printf("dynamic put...\r\n");
-        if (res == 1) {
-            printf("starting sending 201...\r\n");
-//            char* resp = "HTTP/1.1 201 Created\r\n\r\n";
-            send(fd,STATUS_CODE_204, strlen(STATUS_CODE_204), 0);
+    if (strncmp(req->route, DYNAMIC_ROUTE, strlen(DYNAMIC_ROUTE)) == 0) {
+        int res = add_dynamic_record(req->route, req->payload, dynamicResources);
+        if (res == 0) {//success
+            send(fd,STATUS_CODE_201, strlen(STATUS_CODE_201), 0);
             shutdown(fd, SHUT_WR);
-        } else if (res == 0) {    //overriden
-            char *resp = STATUS_CODE_204;
-            int d = send(fd, resp, strlen(resp), 0);
+        } else {    //overriden
+            send(fd, STATUS_CODE_204, strlen(STATUS_CODE_204), 0);
             shutdown(fd, SHUT_WR);
-        } else {
-          send(fd, STATUS_CODE_403, strlen(STATUS_CODE_403), 0);
         }
     } else {
         send(fd, STATUS_CODE_403, strlen(STATUS_CODE_403), 0);
@@ -155,10 +139,9 @@ void put_handler(int fd, struct httpRequest *req) {
     }
 }
 
-void delete_handler(int fd, struct httpRequest *req) {
-    const char dynamicRoute[] = "/dynamic/";
-    if (strncmp(req->route, dynamicRoute, strlen(dynamicRoute)) == 0) {
-        int res = delete_dynamic_record(req->route + strlen("/dynamic/"));
+void delete_handler(int fd, struct httpRequest *req, struct dynamicResource* dynamicResources[MAX_RESOURCES_AMOUNT]) {
+    if (strncmp(req->route, DYNAMIC_ROUTE, strlen(DYNAMIC_ROUTE)) == 0) {
+        int res = delete_dynamic_record(req->route, dynamicResources);
         if (res == -1) {
             send(fd, STATUS_CODE_404, strlen(STATUS_CODE_404), 0);
             shutdown(fd, SHUT_WR);
@@ -172,13 +155,10 @@ void delete_handler(int fd, struct httpRequest *req) {
 
 
 
-void get_handler(int fd, struct httpRequest *req) {
-    printf("handling get\r\n");
-
+void get_handler(int fd, struct httpRequest *req, struct dynamicResource* dynamicResources[MAX_RESOURCES_AMOUNT]) {
     const char foo_url[] = "/static/foo";
     const char bar_url[] = "/static/bar";
     const char baz_url[] = "/static/baz";
-    const char dynamic_url[] = "/dynamic/";
     if (strncmp(req->route, foo_url, strlen(foo_url)) == 0) {
         printf("starting sending...\r\n");
         char* resp = "HTTP/1.1 200 OK\r\nContent-Length: 3\r\n\r\nFoo";
@@ -190,78 +170,58 @@ void get_handler(int fd, struct httpRequest *req) {
     } else if (strncmp(req->route, baz_url, strlen(baz_url)) == 0) {
         char *resp = "HTTP/1.1 200 OK\r\nContent-Length: 3\r\n\r\nBaz";
         send(fd, resp, strlen(resp), 0);
-    } else if (strncmp(req->route, dynamic_url, strlen(dynamic_url)) == 0) {
-        printf("handling dynamic\r\n");
-        char* payload = read_dynamic_record(req->route + sizeof("/dynamic"));
+
+    } else if (strncmp(req->route, DYNAMIC_ROUTE, strlen(DYNAMIC_ROUTE)) == 0) {
+        char* payload = read_dynamic_record(req->route, dynamicResources);
       char resp[REQUEST_LEN];
       if (payload == NULL) {
-          printf("starting sending...\r\n");
-          char* resp = "HTTP/1.1 404 Not Found\r\n\r\n";
-//          char* resp = "HTTP/1.1 200 OK\r\nContent-Length: 3\r\n\r\nFoo";
-          int b = send(fd,resp, strlen(resp), 0);
+          printf("no payload found\r\n");
+          send(fd,STATUS_CODE_404, strlen(STATUS_CODE_404), 0);
           shutdown(fd, SHUT_WR);
-          printf("404 sent, bytes sent: %d", b);
           return;
       }
-        printf("past 404\r\n");
+        printf("payload found\r\n");
         sprintf(resp, "HTTP/1.1 200 OK\r\nContent-Length: %d\r\n\r\n%s", (int)strlen(payload), payload);
         send(fd, resp, strlen(resp), 0);
-        free(payload);
     } else {
         send(fd, STATUS_CODE_404, strlen(STATUS_CODE_404), 0);
     }
 }
 
-char* read_dynamic_record(char* requestedRoute) {
-    char dir[MAX_DIR_NAME];
-    memset(dir, 0, MAX_DIR_NAME);
-    snprintf(dir, sizeof(dir), "dynamic/%s.txt", requestedRoute);
-    if (access(dir, F_OK) == -1) { //resource doesn't exist
-        return NULL;
-    }
-    FILE *file = fopen(dir, "r");
-    if (file == NULL) {
-        return NULL;
-    }
-    int size;
-    fseek(file, 0, SEEK_END);
-
-    // Get the position, which is the size of the file
-    size = ftell(file);
-
-    // Restore the position
-    fseek(file, 0, SEEK_SET);
-    char* payload = calloc(1, size + 1);
-    fgets(payload, size+1, file);
-    fclose(file);
-    return payload;
-}
-
-int add_dynamic_record(char* requestedRoute, char* payload) {
-    char dir[MAX_DIR_NAME];
-    memset(dir, 0, MAX_DIR_NAME);
-    snprintf(dir, sizeof(dir), "dynamic/%s.txt", requestedRoute);
-    if (access(dir, F_OK) == -1) { //resource doesn't exist
-        FILE *file = fopen(dir, "w");
-        if (file == NULL) return -1;
-        fprintf(file, "%s", payload);
-        fclose(file);
-        return 1;
-    } else {    //file already exists, rewrite
-        FILE *file = fopen(dir, "w");
-        if (file == NULL) {
-            return -1;
+char* read_dynamic_record(char* requestedRoute, struct dynamicResource* dynamicResources[MAX_RESOURCES_AMOUNT]) {//NULL on failure, char* to value otherwise
+    for (int i = 0; i < MAX_RESOURCES_AMOUNT && dynamicResources[i] != NULL; i++) {
+        if (strncmp(dynamicResources[i]->key, requestedRoute, strlen(requestedRoute)) == 0) {
+            return dynamicResources[i]->value;
         }
-        fprintf(file, "%s", payload);
-        fclose(file);
-        return 0;
     }
+    return NULL;
 }
 
-int delete_dynamic_record(char * requestedRoute) {
-    char dir[32];
-    sprintf(dir, "dynamic/%s.txt", requestedRoute);
-    return remove(dir);
+int add_dynamic_record(char* requestedRoute, char* payload, struct dynamicResource* dynamicResources[MAX_RESOURCES_AMOUNT]) {// 0 on success, -1 if not
+    int i = 0;
+    while (dynamicResources[i] != NULL) {i++;}
+    dynamicResources[i] = malloc(sizeof(struct dynamicResource));
+    if (dynamicResources[i] == NULL) return -1;
+    dynamicResources[i]->key = malloc(sizeof(char) * strlen(requestedRoute));
+    if (dynamicResources[i]->key == NULL) return -1;
+    dynamicResources[i]->value = malloc(sizeof(char) * strlen(payload));
+    if (dynamicResources[i]->value == NULL) return -1;
+    strncpy(dynamicResources[i]->key, requestedRoute, strlen(requestedRoute));
+    strncpy(dynamicResources[i]->value, payload, strlen(payload));
+    return 0;
+}
+
+int delete_dynamic_record(char * requestedRoute, struct dynamicResource* dynamicResources[MAX_RESOURCES_AMOUNT]) {
+    for (int i = 0; i < MAX_RESOURCES_AMOUNT && dynamicResources[i] != NULL; i++) {
+        if (strncmp(dynamicResources[i]->key, requestedRoute, strlen(requestedRoute)) == 0) {
+            free(dynamicResources[i]->key);
+            free(dynamicResources[i]->value);
+            free(dynamicResources[i]);
+            dynamicResources[i] = NULL;
+            return 0;
+        }
+    }
+    return -1;
 }
 
 int parse_requests(char* msg, struct httpRequest* reqs[10], int* position) { //return value - -1 if error, amount of parsed reqs otherw
