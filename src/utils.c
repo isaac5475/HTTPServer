@@ -49,23 +49,31 @@ int start_server(char* ipaddr, char* port, int* sockfd) {
     }
 }
 
-void request_handler(int fd) {
+void request_handler(int fd, char* msgPrefix) {
     while (1) { //Connection remains open until closed client-side
-        char msg[REQUEST_LEN];
-        memset(msg, 0, REQUEST_LEN);
-        int recvRes = recv(fd, msg, REQUEST_LEN, 0);
-        printf("msg: %s\r\n", msg);
-//        if (recvRes == -1) {
-//            continue;
-//        }
-        if (recvRes <= 0) {
+        char msgBuf[REQUEST_LEN];
+        memset(msgBuf, 0, REQUEST_LEN);
+        int recvRes = recv(fd, msgBuf, REQUEST_LEN, 0);
+        if (recvRes == -1) {
+            continue;
+        }
+        if (recvRes == 0) {
             printf("connection reset\r\n");
             return;
         }
+        char* newMsg = append_strings(msgPrefix, msgBuf);
+        memset(msgPrefix, 0, REQUEST_LEN);
+        printf("msgPrefix: %sstrlen(msgPrefix): %d\r\n", msgPrefix, strlen(msgPrefix));
+        printf("newMsg: %s\r\nstrlen(newMsg): %d\r\n", newMsg, strlen(newMsg));
+        int position = 0;
         struct httpRequest** requests = calloc(10, sizeof(struct httpRequest*));
-        int parse_res = parse_requests(msg, requests);
+        int parse_res = parse_requests(newMsg, requests, &position);
+        if (position != strlen(newMsg)) { //if we couldn't parse the end of the incoming message, save it till next time
+            strncpy(msgPrefix, newMsg + position, strlen(newMsg - position));
+        }
+        free(newMsg);
+//        printf("-----------------------\r\n");
         if (parse_res == 0) {
-            send(fd, STATUS_CODE_400, strlen(STATUS_CODE_400), 0);
             continue;
         }
         for (int i = 0; i < parse_res; i++) {
@@ -103,9 +111,9 @@ void put_handler(int fd, struct httpRequest *req) {
 //    printf("starting sending...\r\n");
 //    char* resp = "HTTP/1.1 201 Created\r\n\r\n";
 //    int b =send(fd,resp, strlen(resp), 0);
-    send(fd, STATUS_CODE_201, strlen(STATUS_CODE_201) + 1, 0);
-    shutdown(fd, SHUT_WR);
-    return;
+//    send(fd, STATUS_CODE_201, strlen(STATUS_CODE_201) + 1, 0);
+//    shutdown(fd, SHUT_WR);
+//    return;
     int content_len_val = -1;
     const char clkey[] = "Content-Length";
     for (int i = 0; i < MAX_HEADERS_AMOUNT && req->headers[i] != NULL; i++) {
@@ -128,21 +136,19 @@ void put_handler(int fd, struct httpRequest *req) {
         pos += strlen(dynamicRoute);
         int res = add_dynamic_record(req->route + strlen("/dynamic/"), req->payload);
 
-
         printf("dynamic put...\r\n");
         if (res == 1) {
             printf("starting sending 201...\r\n");
 //            char* resp = "HTTP/1.1 201 Created\r\n\r\n";
-            int n = send(fd,STATUS_CODE_204, strlen(STATUS_CODE_204) + 1, 0);
+            send(fd,STATUS_CODE_204, strlen(STATUS_CODE_204), 0);
             shutdown(fd, SHUT_WR);
-            printf("201 has been sent, bytes sent: %d\r\n", n);
         } else if (res == 0) {    //overriden
-            printf("starting sending 204...\r\n");
             char *resp = STATUS_CODE_204;
             int d = send(fd, resp, strlen(resp), 0);
             shutdown(fd, SHUT_WR);
+        } else {
+          send(fd, STATUS_CODE_403, strlen(STATUS_CODE_403), 0);
         }
-        return;
     } else {
         send(fd, STATUS_CODE_403, strlen(STATUS_CODE_403), 0);
         shutdown(fd, 2);
@@ -258,15 +264,16 @@ int delete_dynamic_record(char * requestedRoute) {
     return remove(dir);
 }
 
-int parse_requests(char* msg, struct httpRequest* reqs[10]) { //return value - -1 if error, amount of parsed reqs otherw
+int parse_requests(char* msg, struct httpRequest* reqs[10], int* position) { //return value - -1 if error, amount of parsed reqs otherw
     int reqsi = 0;
     int pos = 0;
     while (reqsi < 10) {
         struct httpRequest* parsedReq = calloc(1, sizeof(struct httpRequest));
         int res = parse_request(msg + pos, parsedReq);
         if (res == -1) {
-            reqs[reqsi++] = parsedReq;
-            pos++;
+            if (parsedReq->status > -2) { //if the req is complete
+                reqs[reqsi++] = parsedReq;
+            }
             break;
         }
         if (res == 0) {
@@ -274,11 +281,12 @@ int parse_requests(char* msg, struct httpRequest* reqs[10]) { //return value - -
         }
         pos += res;
         reqs[reqsi++] = parsedReq;
+        *position += res;
     }
     return reqsi;
 }
 
-int parse_request(char* msg, struct httpRequest* req) {
+int parse_request(char* msg, struct httpRequest* req) { //req->status = -1 means the request is invalid, -2 not complete
     req->status = 0;
     int pos = 0;
     if (strlen(msg) == 0) return 0;
@@ -329,8 +337,8 @@ int parse_request(char* msg, struct httpRequest* req) {
     }
     pos += strlen("\r\n");
     int headersLen = parse_headers(msg + pos, req->headers);
-    if ( headersLen == -1) {
-        req->status = -1;
+    if ( headersLen == -1) { //didn't find end of headers -> incomplete
+        req->status = -2;
         return -1;
     }
     pos += headersLen;
@@ -426,4 +434,16 @@ void free_httpRequest(struct httpRequest* req) {
     }
 
     free(req);
+}
+char* append_strings(char* str1, char* str2) {
+    if (str1 == NULL) {
+        if (str2 == NULL) return calloc(1, 1);
+        return str2;
+    }
+    if (str2 == NULL) return str1;
+    char* res = malloc(strlen(str1) + strlen(str2) + 1);
+    if (res == NULL) return NULL;
+    strncpy(res, str1, strlen(str1));
+    strncpy(res+strlen(str1), str2, strlen(str2));
+    return res;
 }

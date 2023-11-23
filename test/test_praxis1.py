@@ -56,9 +56,9 @@ def test_packets():
     with KillOnExit(
         [executable, '127.0.0.1', f'{port}']
     ), socket.create_connection(
-        ('localhost', port), timeout=2000
+        ('localhost', port), timeout=2
     ) as conn:
-        conn.settimeout(5)
+        conn.settimeout(25)
         conn.send('GET / HTTP/1.1\r\n\r\n'.encode())
         time.sleep(.5)
         conn.send('GET / HTTP/1.1\r\na: b\r\n'.encode())
@@ -160,23 +160,23 @@ def test_dynamic_content():
         path = f'/dynamic/{randbytes(8).hex()}'
         content = randbytes(32).hex().encode()
 
-        # conn.request('GET', path)
-        # response = conn.getresponse()
-        # payload = response.read()
-        # assert response.status == 404, f"'{path}' should be missing, but GET was not answered with '404'"
-        # conn.close()
+        conn.request('GET', path)
+        response = conn.getresponse()
+        payload = response.read()
+        assert response.status == 404, f"'{path}' should be missing, but GET was not answered with '404'"
+        conn.close()
         conn.request('PUT', path, content)
         response = conn.getresponse()
         payload = response.read()
         assert response.status in {200, 201, 202, 204}, f"Creation of '{path}' did not yield '201'"
         conn.close()
 
-        # conn.request('GET', path)
-        # response = conn.getresponse()
-        # payload = response.read()
-        # assert response.status == 200
-        # assert payload == content, f"Content of '{path}' does not match what was passed"
-        #
+        conn.request('GET', path)
+        response = conn.getresponse()
+        payload = response.read()
+        assert response.status == 200
+        assert payload == content, f"Content of '{path}' does not match what was passed"
+
         # conn.request('DELETE', path)
         # response = conn.getresponse()
         # payload = response.read()

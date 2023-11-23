@@ -86,7 +86,9 @@ int main(int varc, char* argv[])
 
 //        if (!fork()) { // this is the child process
 //            close(sockfd); // child doesn't need the listener
-            request_handler(new_fd);
+            char msgPrefix[REQUEST_LEN];
+            memset(msgPrefix, 0, REQUEST_LEN);
+            request_handler(new_fd, msgPrefix);
             close(new_fd);
 //            printf("closing connection");
 //            kill(getpid(), SIGTERM);

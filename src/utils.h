@@ -53,8 +53,8 @@ struct httpRequest {
 
 
 int start_server(char* ipaddr, char* port, int* sockfd);
-void request_handler(int fd);
-int parse_requests(char* msg, struct httpRequest* reqs[10]);
+void request_handler(int fd, char* msgPrefix);
+int parse_requests(char* msg, struct httpRequest* reqs[10], int* position);
 int parse_request(char* msg, struct httpRequest* req);
 int parse_headers(char* msg, struct header* headers[]);
 void get_handler(int fd, struct httpRequest *req);
@@ -64,4 +64,5 @@ char* read_dynamic_record(char* requestedRoute);
 int add_dynamic_record(char* requestedRoute, char* payload);
 int delete_dynamic_record(char* requestedRoute);
 void free_httpRequest(struct httpRequest* req);
+char* append_strings(char* str1, char* str2);
 #endif //RN_PRAXIS_UTILS_H
