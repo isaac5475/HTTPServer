@@ -54,10 +54,12 @@ void request_handler(int fd) {
         char msg[REQUEST_LEN];
         memset(msg, 0, REQUEST_LEN);
         int recvRes = recv(fd, msg, REQUEST_LEN, 0);
+        printf("msg: %s\r\n", msg);
 //        if (recvRes == -1) {
 //            continue;
 //        }
         if (recvRes <= 0) {
+            printf("connection reset\r\n");
             return;
         }
         struct httpRequest** requests = calloc(10, sizeof(struct httpRequest*));
@@ -93,10 +95,17 @@ void request_handler(int fd) {
             free_httpRequest(requests[i]);
         }
         free(requests);
+//        return;
     }
 }
 
 void put_handler(int fd, struct httpRequest *req) {
+//    printf("starting sending...\r\n");
+//    char* resp = "HTTP/1.1 201 Created\r\n\r\n";
+//    int b =send(fd,resp, strlen(resp), 0);
+    send(fd, STATUS_CODE_201, strlen(STATUS_CODE_201) + 1, 0);
+    shutdown(fd, SHUT_WR);
+    return;
     int content_len_val = -1;
     const char clkey[] = "Content-Length";
     for (int i = 0; i < MAX_HEADERS_AMOUNT && req->headers[i] != NULL; i++) {
@@ -110,6 +119,7 @@ void put_handler(int fd, struct httpRequest *req) {
     }
     if (content_len_val == -1 || req->payload == NULL ) { //wasn't found
         send(fd, STATUS_CODE_400, strlen(STATUS_CODE_400), 0);
+        shutdown(fd, SHUT_WR);
         return;
     }
     int pos = 0;
@@ -117,15 +127,25 @@ void put_handler(int fd, struct httpRequest *req) {
     if (strncmp(req->route, dynamicRoute, strlen(dynamicRoute)) == 0) {
         pos += strlen(dynamicRoute);
         int res = add_dynamic_record(req->route + strlen("/dynamic/"), req->payload);
+
+
+        printf("dynamic put...\r\n");
         if (res == 1) {
-            send(fd, STATUS_CODE_201, strlen(STATUS_CODE_201), 0);
-            return;
+            printf("starting sending 201...\r\n");
+//            char* resp = "HTTP/1.1 201 Created\r\n\r\n";
+            int n = send(fd,STATUS_CODE_204, strlen(STATUS_CODE_204) + 1, 0);
+            shutdown(fd, SHUT_WR);
+            printf("201 has been sent, bytes sent: %d\r\n", n);
         } else if (res == 0) {    //overriden
-            send(fd, STATUS_CODE_204, strlen(STATUS_CODE_204), 0);
+            printf("starting sending 204...\r\n");
+            char *resp = STATUS_CODE_204;
+            int d = send(fd, resp, strlen(resp), 0);
+            shutdown(fd, SHUT_WR);
         }
         return;
     } else {
         send(fd, STATUS_CODE_403, strlen(STATUS_CODE_403), 0);
+        shutdown(fd, 2);
     }
 }
 
@@ -135,6 +155,7 @@ void delete_handler(int fd, struct httpRequest *req) {
         int res = delete_dynamic_record(req->route + strlen("/dynamic/"));
         if (res == -1) {
             send(fd, STATUS_CODE_404, strlen(STATUS_CODE_404), 0);
+            shutdown(fd, SHUT_WR);
             return;
         }
         send(fd, STATUS_CODE_204, strlen(STATUS_CODE_204), 0);
@@ -146,13 +167,17 @@ void delete_handler(int fd, struct httpRequest *req) {
 
 
 void get_handler(int fd, struct httpRequest *req) {
+    printf("handling get\r\n");
+
     const char foo_url[] = "/static/foo";
     const char bar_url[] = "/static/bar";
     const char baz_url[] = "/static/baz";
     const char dynamic_url[] = "/dynamic/";
     if (strncmp(req->route, foo_url, strlen(foo_url)) == 0) {
+        printf("starting sending...\r\n");
         char* resp = "HTTP/1.1 200 OK\r\nContent-Length: 3\r\n\r\nFoo";
-        send(fd, resp, strlen(resp), 0);
+        int b = send(fd, resp, strlen(resp), 0);
+        printf("resp sent, bytes sent: %d", b);
     } else if (strncmp(req->route, bar_url, strlen(bar_url)) == 0) {
         char* resp = "HTTP/1.1 200 OK\r\nContent-Length: 3\r\n\r\nBar";
         send(fd, resp, strlen(resp), 0);
@@ -160,14 +185,19 @@ void get_handler(int fd, struct httpRequest *req) {
         char *resp = "HTTP/1.1 200 OK\r\nContent-Length: 3\r\n\r\nBaz";
         send(fd, resp, strlen(resp), 0);
     } else if (strncmp(req->route, dynamic_url, strlen(dynamic_url)) == 0) {
-        send(fd, STATUS_CODE_404, strlen(STATUS_CODE_404), 0);
-        return;
-      char* payload = read_dynamic_record(req->route + sizeof("/dynamic"));
+        printf("handling dynamic\r\n");
+        char* payload = read_dynamic_record(req->route + sizeof("/dynamic"));
       char resp[REQUEST_LEN];
       if (payload == NULL) {
-          send(fd,STATUS_CODE_404, strlen(STATUS_CODE_404), 0);;
+          printf("starting sending...\r\n");
+          char* resp = "HTTP/1.1 404 Not Found\r\n\r\n";
+//          char* resp = "HTTP/1.1 200 OK\r\nContent-Length: 3\r\n\r\nFoo";
+          int b = send(fd,resp, strlen(resp), 0);
+          shutdown(fd, SHUT_WR);
+          printf("404 sent, bytes sent: %d", b);
           return;
       }
+        printf("past 404\r\n");
         sprintf(resp, "HTTP/1.1 200 OK\r\nContent-Length: %d\r\n\r\n%s", (int)strlen(payload), payload);
         send(fd, resp, strlen(resp), 0);
         free(payload);
@@ -177,8 +207,9 @@ void get_handler(int fd, struct httpRequest *req) {
 }
 
 char* read_dynamic_record(char* requestedRoute) {
-    char dir[32];
-    sprintf(dir, "dynamic/%s.txt", requestedRoute);
+    char dir[MAX_DIR_NAME];
+    memset(dir, 0, MAX_DIR_NAME);
+    snprintf(dir, sizeof(dir), "dynamic/%s.txt", requestedRoute);
     if (access(dir, F_OK) == -1) { //resource doesn't exist
         return NULL;
     }
@@ -201,8 +232,9 @@ char* read_dynamic_record(char* requestedRoute) {
 }
 
 int add_dynamic_record(char* requestedRoute, char* payload) {
-    char dir[32];
-    sprintf(dir, "dynamic/%s.txt", requestedRoute);
+    char dir[MAX_DIR_NAME];
+    memset(dir, 0, MAX_DIR_NAME);
+    snprintf(dir, sizeof(dir), "dynamic/%s.txt", requestedRoute);
     if (access(dir, F_OK) == -1) { //resource doesn't exist
         FILE *file = fopen(dir, "w");
         if (file == NULL) return -1;
@@ -275,7 +307,7 @@ int parse_request(char* msg, struct httpRequest* req) {
     pos += 1; // ' '
     long long lenOfUrl = strchr(msg + pos, ' ') - (msg + pos);  //  parse URL
     req->routeLen = lenOfUrl;
-    req->route = (char *) calloc(1, lenOfUrl);
+    req->route = (char *) calloc(1, lenOfUrl + 1);
     strncpy(req->route, msg + pos, lenOfUrl);
     pos += lenOfUrl;
 

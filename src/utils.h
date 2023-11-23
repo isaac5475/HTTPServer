@@ -32,6 +32,7 @@
 #define STATUS_CODE_403 "HTTP/1.1 403 Forbidden\r\n\r\n"
 #define STATUS_REPLY "Reply\r\n\r\n"
 #define MAX_HEADERS_AMOUNT 10
+#define MAX_DIR_NAME 128
 
 #define HTTP_VERSION "HTTP/1.1"
 
