@@ -20,6 +20,7 @@
 #include <sys/wait.h>
 #include <signal.h>
 #include "sys/shm.h"
+#include <time.h>
 
 #define REQUEST_LEN 256
 #define MAX_HEADERS_AMOUNT 10

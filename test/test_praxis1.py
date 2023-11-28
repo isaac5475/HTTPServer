@@ -165,13 +165,13 @@ def test_dynamic_content():
         payload = response.read()
         assert response.status == 404, f"'{path}' should be missing, but GET was not answered with '404'"
         conn.close()
-        # time.sleep(3)  # Attempt to gracefully handle all kinds of multi-packet replies...
+        time.sleep(3)  # Attempt to gracefully handle all kinds of multi-packet replies...
         conn.request('PUT', path, content)
         response = conn.getresponse()
         payload = response.read()
         assert response.status in {200, 201, 202, 204}, f"Creation of '{path}' did not yield '201'"
         conn.close()
-        # time.sleep(2)  # Attempt to gracefully handle all kinds of multi-packet replies...
+        time.sleep(2)  # Attempt to gracefully handle all kinds of multi-packet replies...
         #
         conn.request('GET', path)
         response = conn.getresponse()
@@ -179,7 +179,7 @@ def test_dynamic_content():
         assert response.status == 200
         assert payload == content, f"Content of '{path}' does not match what was passed"
 
-        # time.sleep(1)  # Attempt to gracefully handle all kinds of multi-packet replies...
+        time.sleep(1)  # Attempt to gracefully handle all kinds of multi-packet replies...
         conn.request('DELETE', path)
         response = conn.getresponse()
         payload = response.read()
