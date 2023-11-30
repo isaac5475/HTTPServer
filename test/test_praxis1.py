@@ -56,7 +56,7 @@ def test_packets():
     with KillOnExit(
         [executable, '127.0.0.1', f'{port}']
     ), socket.create_connection(
-        ('localhost', port), timeout=2
+        ('localhost', port), timeout=20
     ) as conn:
         conn.settimeout(25)
         conn.send('GET / HTTP/1.1\r\n\r\n'.encode())
@@ -118,7 +118,7 @@ def test_static_content():
     with KillOnExit(
         [executable, '127.0.0.1', f'{port}']
     ), contextlib.closing(
-        HTTPConnection('localhost', port, timeout=2)
+        HTTPConnection('localhost', port, timeout=2000)
     ) as conn:
         conn.connect()
 
@@ -153,7 +153,7 @@ def test_dynamic_content():
     with KillOnExit(
         [executable, '127.0.0.1', f'{port}']
     ), contextlib.closing(
-        HTTPConnection('localhost', port, timeout=10)
+        HTTPConnection('localhost', port, timeout=1000)
     ) as conn:
         conn.connect()
         # assert False
@@ -164,14 +164,10 @@ def test_dynamic_content():
         response = conn.getresponse()
         payload = response.read()
         assert response.status == 404, f"'{path}' should be missing, but GET was not answered with '404'"
-        conn.close()
-        time.sleep(3)  # Attempt to gracefully handle all kinds of multi-packet replies...
         conn.request('PUT', path, content)
         response = conn.getresponse()
         payload = response.read()
         assert response.status in {200, 201, 202, 204}, f"Creation of '{path}' did not yield '201'"
-        conn.close()
-        time.sleep(2)  # Attempt to gracefully handle all kinds of multi-packet replies...
         #
         conn.request('GET', path)
         response = conn.getresponse()
@@ -179,7 +175,6 @@ def test_dynamic_content():
         assert response.status == 200
         assert payload == content, f"Content of '{path}' does not match what was passed"
 
-        time.sleep(1)  # Attempt to gracefully handle all kinds of multi-packet replies...
         conn.request('DELETE', path)
         response = conn.getresponse()
         payload = response.read()

@@ -26,11 +26,12 @@
 #define MAX_HEADERS_AMOUNT 10
 #define STATUS_CODE_400 "HTTP/1.1 400 Bad Request\r\n\r\n"
 #define STATUS_CODE_404 "HTTP/1.1 404 Not Found\r\n\r\n"
-#define STATUS_CODE_501 "HTTP/1.1 501 Not Implemented\r\n\r\n"
+#define STATUS_CODE_404_CL "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n"
+#define STATUS_CODE_501 "HTTP/1.1 501 Not Implemented\r\nContent-Length: 0\r\n\r\n"
 #define STATUS_CODE_200 "HTTP/1.1 200 OK\r\n\r\n"
-#define STATUS_CODE_201 "HTTP/1.1 201 Created\r\n\r\n"
-#define STATUS_CODE_204 "HTTP/1.1 204 No Content\r\n\r\n"
-#define STATUS_CODE_403 "HTTP/1.1 403 Forbidden\r\n\r\n"
+#define STATUS_CODE_201 "HTTP/1.1 201 Created\r\nContent-Length: 0\r\n\r\n"
+#define STATUS_CODE_204 "HTTP/1.1 204 No Content\r\nContent-Length: 0\r\n\r\n"
+#define STATUS_CODE_403 "HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\n\r\n"
 #define STATUS_REPLY "Reply\r\n\r\n"
 #define MAX_HEADERS_AMOUNT 10
 #define MAX_DIR_NAME 128
@@ -73,4 +74,5 @@ int add_dynamic_record(char* requestedRoute, char* payload, struct dynamicResour
 int delete_dynamic_record(char* requestedRoute, struct dynamicResource* dynamicResources[MAX_RESOURCES_AMOUNT]);
 void free_httpRequest(struct httpRequest* req);
 char* append_strings(char* str1, char* str2);
+void free_dynamic_records(struct dynamicResource* dynamicResources[MAX_RESOURCES_AMOUNT]);
 #endif //RN_PRAXIS_UTILS_H

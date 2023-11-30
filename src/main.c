@@ -108,7 +108,7 @@ int main(int varc, char* argv[])
 //        }
         close(new_fd);  // parent doesn't need this
     }
-
+    free_dynamic_records(dynamicResources);
     return 0;
 }
 
