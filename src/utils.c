@@ -54,7 +54,6 @@ void request_handler(int fd, char* msgPrefix, struct dynamicResource* dynamicRes
         char msgBuf[REQUEST_LEN];
         memset(msgBuf, 0, REQUEST_LEN);
         int recvRes = recv(fd, msgBuf, REQUEST_LEN, 0);
-        printf("recv res:\n%s\n", msgBuf);
         if (recvRes == -1) {
             continue;
         }
@@ -71,11 +70,14 @@ void request_handler(int fd, char* msgPrefix, struct dynamicResource* dynamicRes
             strncpy(newMsg, msgBuf, strlen(msgBuf));
         }
         int position = 0;
-        printf("msg to be parsed:\n%s\n", newMsg);
         struct httpRequest** requests = calloc(10, sizeof(struct httpRequest*));
         int parse_res = parse_requests(newMsg, requests, &position);
         if (position != strlen(newMsg)) { //if we couldn't parse the end of the incoming message, save it till next time
-            strncpy(msgPrefix, newMsg + position, strlen(newMsg) - position);
+            size_t remainingLength = strlen(newMsg) - position;
+            strncpy(msgPrefix, newMsg + position, remainingLength);
+            msgPrefix[remainingLength] = '\0';
+        } else if (requests[parse_res-1]->status == -2) {
+            strncpy(msgPrefix, newMsg, strlen(newMsg));
         }
         free(newMsg);
 //        printf("-----------------------\r\n");
@@ -89,6 +91,11 @@ void request_handler(int fd, char* msgPrefix, struct dynamicResource* dynamicRes
                 free_httpRequest((requests[i]));
                 continue;
             }
+            if (requests[i]->status == -2) {
+                free_httpRequest((requests[i]));
+                continue;
+            }
+
 
             if (strncmp(requests[i]->HTTPMethode, "GET", strlen("GET")) == 0) {
                 get_handler(fd, requests[i], dynamicResources);
@@ -114,6 +121,8 @@ void request_handler(int fd, char* msgPrefix, struct dynamicResource* dynamicRes
 }
 
 void put_handler(int fd, struct httpRequest *req, struct dynamicResource* dynamicResources[MAX_RESOURCES_AMOUNT]) {
+//    send(fd, STATUS_CODE_404, strlen(STATUS_CODE_404), 0);
+//    return;
     printf("start put_handler\n");
     int content_len_val = -1;
     const char clkey[] = "Content-Length";
@@ -121,23 +130,24 @@ void put_handler(int fd, struct httpRequest *req, struct dynamicResource* dynami
         if (strncmp(req->headers[i]->key, clkey, strlen(clkey)) == 0) {
             content_len_val = strtol(req->headers[i]->value, NULL, 10);
             if (content_len_val == 0) {//Couldn't parse or header == 0, which is invalid behaviour
-                send(fd, STATUS_CODE_400, strlen(STATUS_CODE_400), 0);
+                send(fd, STATUS_CODE_400_CL, strlen(STATUS_CODE_400_CL), 0);
                 return;
             } else break;
         }
     }
+    if (req->payload == NULL) {
+    send(fd, STATUS_CODE_403, strlen(STATUS_CODE_403), 0);
+    return;}
     if (content_len_val == -1 || req->payload == NULL ) { //wasn't found
-        send(fd, STATUS_CODE_400, strlen(STATUS_CODE_400), 0);
+        send(fd, STATUS_CODE_400_CL, strlen(STATUS_CODE_400_CL), 0);
         return;
     }
     if (strncmp(req->route, DYNAMIC_ROUTE, strlen(DYNAMIC_ROUTE)) == 0) {
         int res = add_dynamic_record(req->route, req->payload, dynamicResources);
         if (res == 0) {//success
-            printf("start sending 201\n");
             send(fd,STATUS_CODE_201, strlen(STATUS_CODE_201), 0);
         } else {    //overriden
             send(fd, STATUS_CODE_204, strlen(STATUS_CODE_204), 0);
-            printf("start sending 204\n");
         }
     } else {
         send(fd, STATUS_CODE_403, strlen(STATUS_CODE_403), 0);
@@ -164,7 +174,6 @@ void get_handler(int fd, struct httpRequest *req, struct dynamicResource* dynami
     const char bar_url[] = "/static/bar";
     const char baz_url[] = "/static/baz";
     if (strncmp(req->route, foo_url, strlen(foo_url)) == 0) {
-        printf("starting sending...\r\n");
         char* resp = "HTTP/1.1 200 OK\r\nContent-Length: 3\r\n\r\nFoo";
         send(fd, resp, strlen(resp), 0);
     } else if (strncmp(req->route, bar_url, strlen(bar_url)) == 0) {
@@ -182,7 +191,6 @@ void get_handler(int fd, struct httpRequest *req, struct dynamicResource* dynami
           return;
       }
         sprintf(resp, "HTTP/1.1 200 OK\r\nContent-Length: %d\r\n\r\n%s", (int)strlen(payload), payload);
-      printf("sent dynamic packet:\n%s",resp);
         send(fd, resp, strlen(resp), 0);
     } else {
         send(fd, STATUS_CODE_404, strlen(STATUS_CODE_404), 0);
@@ -238,6 +246,7 @@ int parse_requests(char* msg, struct httpRequest* reqs[10], int* position) { //r
             break;
         }
         if (res == 0) {
+            free(parsedReq);
             break;
         }
         pos += res;
@@ -317,6 +326,10 @@ int parse_request(char* msg, struct httpRequest* req) { //req->status = -1 means
     }
     if (contentLen == -1) {
         req->status = -1;
+        return pos;
+    }
+    if (contentLen > strlen(msg+pos)) {//payload may be not received as whole
+        req->status = -2;//incomplete
         return pos;
     }
     req->payload = calloc(contentLen + 1, sizeof(char));

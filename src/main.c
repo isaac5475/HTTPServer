@@ -5,13 +5,9 @@
 #include "main.h"
 #include "utils.h"
 
-/*
-** server.c -- a stream socket server demo
-*/
 
 
 
-#define BACKLOG 10   // how many pending connections queue will hold
 const int SHM_SIZE = 1024;
 
 
@@ -86,26 +82,11 @@ int main(int varc, char* argv[])
                   s, sizeof s);
         printf("server: got connection from %s\n", s);
 
-//        if (!fork()) { // this is the child process
-//            close(sockfd); // child doesn't need the listener
             char msgPrefix[REQUEST_LEN];
             memset(msgPrefix, 0, REQUEST_LEN);
-        clock_t start_time, end_time;
-        double cpu_time_used;
-        start_time = clock();
-
-        // Call your function
 
         request_handler(new_fd, msgPrefix, dynamicResources);
-        // Calculate the elapsed time
-        end_time = clock();
-        cpu_time_used = ((double) (end_time - start_time)) / CLOCKS_PER_SEC;
-
-        printf("Processing time: %f seconds\n", cpu_time_used);
             close(new_fd);
-//            printf("closing connection");
-//            kill(getpid(), SIGTERM);
-//        }
         close(new_fd);  // parent doesn't need this
     }
     free_dynamic_records(dynamicResources);

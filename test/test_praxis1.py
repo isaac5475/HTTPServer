@@ -153,17 +153,19 @@ def test_dynamic_content():
     with KillOnExit(
         [executable, '127.0.0.1', f'{port}']
     ), contextlib.closing(
-        HTTPConnection('localhost', port, timeout=1000)
+        HTTPConnection('localhost', port, timeout=10)
     ) as conn:
         conn.connect()
         # assert False
         path = f'/dynamic/{randbytes(8).hex()}'
         content = randbytes(32).hex().encode()
+        print("first")
 
         conn.request('GET', path)
         response = conn.getresponse()
         payload = response.read()
         assert response.status == 404, f"'{path}' should be missing, but GET was not answered with '404'"
+        conn.close()
         conn.request('PUT', path, content)
         response = conn.getresponse()
         payload = response.read()

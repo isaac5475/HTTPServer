@@ -22,23 +22,20 @@
 #include "sys/shm.h"
 #include <time.h>
 
-#define REQUEST_LEN 256
-#define MAX_HEADERS_AMOUNT 10
+#define REQUEST_LEN 8192
+#define MAX_HEADERS_AMOUNT 40
+#define MAX_RESOURCES_AMOUNT 100
+#define BACKLOG 10   // how many pending connections queue will hold
 #define STATUS_CODE_400 "HTTP/1.1 400 Bad Request\r\n\r\n"
-#define STATUS_CODE_404 "HTTP/1.1 404 Not Found\r\n\r\n"
+#define STATUS_CODE_400_CL "HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\n\r\n"
+#define STATUS_CODE_404 "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n"
 #define STATUS_CODE_404_CL "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n"
 #define STATUS_CODE_501 "HTTP/1.1 501 Not Implemented\r\nContent-Length: 0\r\n\r\n"
-#define STATUS_CODE_200 "HTTP/1.1 200 OK\r\n\r\n"
 #define STATUS_CODE_201 "HTTP/1.1 201 Created\r\nContent-Length: 0\r\n\r\n"
 #define STATUS_CODE_204 "HTTP/1.1 204 No Content\r\nContent-Length: 0\r\n\r\n"
 #define STATUS_CODE_403 "HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\n\r\n"
-#define STATUS_REPLY "Reply\r\n\r\n"
-#define MAX_HEADERS_AMOUNT 10
-#define MAX_DIR_NAME 128
-#define MAX_RESOURCES_AMOUNT 40
 #define DYNAMIC_ROUTE "/dynamic/"
 
-#define HTTP_VERSION "HTTP/1.1"
 
 struct dynamicResource {
     char* key;
