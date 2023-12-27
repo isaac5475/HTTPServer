@@ -10,7 +10,9 @@ set(CPACK_SOURCE_IGNORE_FILES
   /\\..*$
 )
 add_executable(webserver
-        src/utils.c src/main.c)
+        src/utils.c src/main.c
+        src/udp.c
+        src/udp.h)
 set(CMAKE_BUILD_TYPE Debug)
 set(CPACK_VERBATIM_VARIABLES YES)
 include(CPack)
