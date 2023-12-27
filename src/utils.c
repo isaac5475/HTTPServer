@@ -52,11 +52,11 @@ int start_server_tcp(char* ipaddr, char* port, int* sockfd) {
 int start_server_udp(char* ipaddr, char* port, int* sockfd) {
     struct addrinfo hints, *servinfo, *p;
     int yes = 1;
+    int rv;
     memset(&hints, 0, sizeof hints);
-    hints.ai_family = AF_UNSPEC;
+    hints.ai_family = AF_INET; // set to AF_INET to use IPv4
     hints.ai_socktype = SOCK_DGRAM;
     hints.ai_flags = AI_PASSIVE; // use my IP
-    int rv;
 
     if ((rv = getaddrinfo(ipaddr, port, &hints, &servinfo)) != 0) {
         fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
@@ -66,32 +66,26 @@ int start_server_udp(char* ipaddr, char* port, int* sockfd) {
     // loop through all the results and bind to the first we can
     for(p = servinfo; p != NULL; p = p->ai_next) {
         if ((*sockfd = socket(p->ai_family, p->ai_socktype,
-                              p->ai_protocol)) == -1) {
-            perror("server: socket");
+                             p->ai_protocol)) == -1) {
+            perror("listener: socket");
             continue;
-        }
-
-        if (setsockopt(*sockfd, SOL_SOCKET, SO_REUSEADDR, &yes,
-                       sizeof(int)) == -1) {
-            perror("setsockopt");
-            exit(1);
         }
 
         if (bind(*sockfd, p->ai_addr, p->ai_addrlen) == -1) {
             close(*sockfd);
-            perror("server: bind");
+            perror("listener: bind");
             continue;
         }
 
         break;
     }
 
-    freeaddrinfo(servinfo); // all done with this structure
-
-    if (p == NULL)  {
-        fprintf(stderr, "server: failed to bind\n");
-        exit(1);
+    if (p == NULL) {
+        fprintf(stderr, "listener: failed to bind socket\n");
+        return 2;
     }
+
+    freeaddrinfo(servinfo);
 }
 
 void request_handler(int fd, char* msgPrefix, struct dynamicResource* dynamicResources[MAX_RESOURCES_AMOUNT]) {

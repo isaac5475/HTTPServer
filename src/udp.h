@@ -5,4 +5,5 @@
 #ifndef RN_PRAXIS_UDP_H
 #define RN_PRAXIS_UDP_H
 
+void udp_handler(char* msg_buf);
 #endif //RN_PRAXIS_UDP_H
