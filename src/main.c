@@ -41,19 +41,24 @@ int main(int varc, char* argv[])
     }
     char* ipaddr = argv[1];
     char* port = argv[2];
-    int sockfd, new_fd;  // listen on sock_fd, new connection on new_fd
+    int sockfd_tcp, new_fd_tcp;  // TCP: listen on sock_fd, new connection on new_fd
+    int sockfd_udp, new_fd_udp;  // UDP: listen on sock_fd, new connection on new_fd
+    int num_bytes;
     struct sockaddr_storage their_addr; // connector's address information
     struct sigaction sa;
     socklen_t sin_size;
+    socklen_t addr_len;
     char s[INET6_ADDRSTRLEN];
+    char buf[REQUEST_LEN];
     struct dynamicResource* dynamicResources[MAX_RESOURCES_AMOUNT];
     memset(dynamicResources, 0, MAX_RESOURCES_AMOUNT * sizeof(struct  dynamicResource*));
 
 
 
-    start_server(ipaddr, port, &sockfd);
+    start_server_tcp(ipaddr, port, &sockfd_tcp);
+    start_server_udp(ipaddr, port, &sockfd_udp);
 
-    if (listen(sockfd, BACKLOG) == -1) {
+    if (listen(sockfd_tcp, BACKLOG) == -1) {
         perror("listen");
         exit(1);
     }
@@ -66,30 +71,47 @@ int main(int varc, char* argv[])
         exit(1);
     }
 
-    printf("server: waiting for connections...\n");
+    printf("Listener: waiting to recvfrom...\n");
 
-    while(1) {  // main accept() loop
-        sin_size = sizeof their_addr;
-        new_fd = accept(sockfd, (struct sockaddr *)&their_addr, &sin_size);
-        printf("accepted new connection: %d", new_fd);
-        if (new_fd == -1) {
-            perror("accept");
-            continue;
+    while(1) {  // main recvfrom() loop
+        addr_len = sizeof their_addr;
+
+        if ((num_bytes = recvfrom(sockfd_udp, buf, REQUEST_LEN - 1, 0,
+                                  (struct sockaddr *) &their_addr, &addr_len)) == -1) {
+            perror("recvfrom");
+            exit(1);
         }
 
-        inet_ntop(their_addr.ss_family,
-                  get_in_addr((struct sockaddr *)&their_addr),
-                  s, sizeof s);
-        printf("server: got connection from %s\n", s);
-
-            char msgPrefix[REQUEST_LEN];
-            memset(msgPrefix, 0, REQUEST_LEN);
-
-        request_handler(new_fd, msgPrefix, dynamicResources);
-            close(new_fd);
-        close(new_fd);  // parent doesn't need this
+        printf("listener: got packet from %s\n",
+               inet_ntop(their_addr.ss_family,
+                         get_in_addr((struct sockaddr *) &their_addr),
+                         s, sizeof s));
+        printf("listener: packet is %d bytes long\n", num_bytes);
+        buf[num_bytes] = '\0';
+        printf("listener: packet contains \"%s\"\n", buf);
+        close(sockfd_udp);
+//        sin_size = sizeof their_addr;
+//        new_fd_tcp = accept(sockfd_tcp, (struct sockaddr *)&their_addr, &sin_size);
+//        printf("accepted new connection: %d", new_fd_tcp);
+//        if (new_fd_tcp == -1) {
+//            perror("accept");
+//            continue;
+//        }
+//
+//        inet_ntop(their_addr.ss_family,
+//                  get_in_addr((struct sockaddr *)&their_addr),
+//                  s, sizeof s);
+//        printf("server: got connection from %s\n", s);
+//
+//            char msgPrefix[REQUEST_LEN];
+//            memset(msgPrefix, 0, REQUEST_LEN);
+//
+//        request_handler(new_fd_tcp, msgPrefix, dynamicResources);
+//            close(new_fd_tcp);
+//        close(new_fd_tcp);  // parent doesn't need this
+//    }
+//    free_dynamic_records(dynamicResources);
+//    return 0;
     }
-    free_dynamic_records(dynamicResources);
-    return 0;
 }
 

@@ -58,7 +58,8 @@ struct httpRequest {
 };
 
 
-int start_server(char* ipaddr, char* port, int* sockfd);
+int start_server_tcp(char* ipaddr, char* port, int* sockfd);
+int start_server_udp(char* ipaddr, char* port, int* sockfd);
 void request_handler(int fd, char* msgPrefix, struct dynamicResource* dynamicResources[MAX_RESOURCES_AMOUNT]);
 int parse_requests(char* msg, struct httpRequest* reqs[10], int* position);
 int parse_request(char* msg, struct httpRequest* req);

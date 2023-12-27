@@ -1,5 +1,0 @@
-/home/murat/TKN23/rn-praxis/cmake-build-debug/CMakeFiles/new_target.dir
-/home/murat/TKN23/rn-praxis/cmake-build-debug/CMakeFiles/package.dir
-/home/murat/TKN23/rn-praxis/cmake-build-debug/CMakeFiles/package_source.dir
-/home/murat/TKN23/rn-praxis/cmake-build-debug/CMakeFiles/edit_cache.dir
-/home/murat/TKN23/rn-praxis/cmake-build-debug/CMakeFiles/rebuild_cache.dir

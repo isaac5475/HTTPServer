@@ -1,5 +1,0 @@
-/home/murat/TKN23/rn-praxis/build/CMakeFiles/new_target.dir
-/home/murat/TKN23/rn-praxis/build/CMakeFiles/package.dir
-/home/murat/TKN23/rn-praxis/build/CMakeFiles/package_source.dir
-/home/murat/TKN23/rn-praxis/build/CMakeFiles/edit_cache.dir
-/home/murat/TKN23/rn-praxis/build/CMakeFiles/rebuild_cache.dir
