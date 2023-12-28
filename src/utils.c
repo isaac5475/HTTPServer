@@ -2,6 +2,7 @@
 // Created by murat on 11/11/23.
 //
 
+#include <fcntl.h>
 #include "utils.h"
 
 int start_server_tcp(char* ipaddr, char* port, int* sockfd) {
@@ -25,13 +26,12 @@ int start_server_tcp(char* ipaddr, char* port, int* sockfd) {
             perror("server: socket");
             continue;
         }
-
+        fcntl(*sockfd, F_SETFL, O_NONBLOCK);
         if (setsockopt(*sockfd, SOL_SOCKET, SO_REUSEADDR, &yes,
                        sizeof(int)) == -1) {
             perror("setsockopt");
             exit(1);
         }
-
         if (bind(*sockfd, p->ai_addr, p->ai_addrlen) == -1) {
             close(*sockfd);
             perror("server: bind");
@@ -52,11 +52,11 @@ int start_server_tcp(char* ipaddr, char* port, int* sockfd) {
 int start_server_udp(char* ipaddr, char* port, int* sockfd) {
     struct addrinfo hints, *servinfo, *p;
     int yes = 1;
-    int rv;
     memset(&hints, 0, sizeof hints);
-    hints.ai_family = AF_INET; // set to AF_INET to use IPv4
+    hints.ai_family = AF_UNSPEC;
     hints.ai_socktype = SOCK_DGRAM;
     hints.ai_flags = AI_PASSIVE; // use my IP
+    int rv;
 
     if ((rv = getaddrinfo(ipaddr, port, &hints, &servinfo)) != 0) {
         fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
@@ -66,27 +66,33 @@ int start_server_udp(char* ipaddr, char* port, int* sockfd) {
     // loop through all the results and bind to the first we can
     for(p = servinfo; p != NULL; p = p->ai_next) {
         if ((*sockfd = socket(p->ai_family, p->ai_socktype,
-                             p->ai_protocol)) == -1) {
-            perror("listener: socket");
+                              p->ai_protocol)) == -1) {
+            perror("server: socket");
             continue;
         }
-
+        fcntl(*sockfd, F_SETFL, O_NONBLOCK);
+        if (setsockopt(*sockfd, SOL_SOCKET, SO_REUSEADDR, &yes,
+                       sizeof(int)) == -1) {
+            perror("setsockopt");
+            exit(1);
+        }
         if (bind(*sockfd, p->ai_addr, p->ai_addrlen) == -1) {
             close(*sockfd);
-            perror("listener: bind");
+            perror("server: bind");
             continue;
         }
 
         break;
     }
 
-    if (p == NULL) {
-        fprintf(stderr, "listener: failed to bind socket\n");
-        return 2;
-    }
+    freeaddrinfo(servinfo); // all done with this structure
 
-    freeaddrinfo(servinfo);
+    if (p == NULL)  {
+        fprintf(stderr, "server: failed to bind\n");
+        exit(1);
+    }
 }
+
 
 void request_handler(int fd, char* msgPrefix, struct dynamicResource* dynamicResources[MAX_RESOURCES_AMOUNT]) {
     while (1) { //Connection remains open until closed client-side

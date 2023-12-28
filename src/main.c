@@ -67,51 +67,52 @@ int main(int varc, char* argv[])
         perror("listen");
         exit(1);
     }
-    pid_t udp_p, tcp_p;
-    udp_p = fork();
-    if (udp_p == 0) {  //udp's thread
-        while (1) {  // main recvfrom() loop
+        while (1) {  // main loop
             addr_len = sizeof their_addr_udp;
-
-            if ((num_bytes = recvfrom(sockfd_udp, buf, REQUEST_LEN - 1, 0,
-                                      (struct sockaddr *) &their_addr_udp, &addr_len)) == -1) {
-                perror("recvfrom");
-                exit(1);
+            ssize_t bytes_read = recvfrom(sockfd_udp, buf, REQUEST_LEN - 1, 0,
+                                (struct sockaddr *) &their_addr_udp, &addr_len);
+            if (bytes_read == -1) {
+                if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                // Do nothing
+                } else {
+                    perror("recvfrom");
+                    exit(1);
+                }
+            } else if (bytes_read > 0) {
+                printf("listener: got packet from %s\n",
+                       inet_ntop(their_addr_udp.ss_family,
+                                 get_in_addr((struct sockaddr *) &their_addr_udp),
+                                 s, sizeof s));
+                printf("listener: packet is %d bytes long\n", num_bytes);
+                buf[num_bytes] = '\0';
+                udp_handler(buf);
             }
 
-            printf("listener: got packet from %s\n",
-                   inet_ntop(their_addr_udp.ss_family,
-                             get_in_addr((struct sockaddr *) &their_addr_udp),
-                             s, sizeof s));
-            printf("listener: packet is %d bytes long\n", num_bytes);
-            buf[num_bytes] = '\0';
-            udp_handler(buf);
-            close(sockfd_udp);
-        }
-    } else {
-        tcp_p = fork();
-        if (tcp_p == 0) { //tcp's thread
+            //tcp handler
+
             sin_size = sizeof their_addr_tcp;
             new_fd_tcp = accept(sockfd_tcp, (struct sockaddr *) &their_addr_tcp, &sin_size);
-            printf("accepted new connection: %d", new_fd_tcp);
             if (new_fd_tcp == -1) {
-                perror("accept");
+                if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                    //Do Nothing and skip
+                }
+            } else {
+                printf("accepted new connection: %d", new_fd_tcp);
+                if (new_fd_tcp == -1) {
+                    perror("accept");
+                }
+
+                inet_ntop(their_addr_tcp.ss_family,
+                          get_in_addr((struct sockaddr *) &their_addr_tcp),
+                          s, sizeof s);
+                printf("server: got connection from %s\n", s);
+
+                char msgPrefix[REQUEST_LEN];
+                memset(msgPrefix, 0, REQUEST_LEN);
+
+                request_handler(new_fd_tcp, msgPrefix, dynamicResources);
+                close(new_fd_tcp);
             }
-
-            inet_ntop(their_addr_tcp.ss_family,
-                      get_in_addr((struct sockaddr *) &their_addr_tcp),
-                      s, sizeof s);
-            printf("server: got connection from %s\n", s);
-
-            char msgPrefix[REQUEST_LEN];
-            memset(msgPrefix, 0, REQUEST_LEN);
-
-            request_handler(new_fd_tcp, msgPrefix, dynamicResources);
-            close(new_fd_tcp);
-            close(new_fd_tcp);  // parent doesn't need this
         }
-        free_dynamic_records(dynamicResources);
-    }
-    wait(NULL);
 }
 
