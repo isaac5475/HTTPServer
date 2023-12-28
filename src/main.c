@@ -35,12 +35,14 @@ void *get_in_addr(struct sockaddr *sa)
 
 int main(int varc, char* argv[])
 {
-    if (varc != 3) {
-        fprintf(stderr, "Usage: webserver [ipaddr] [port]");
+    if (varc != 4) {
+        fprintf(stderr, "Usage: webserver [ipaddr] [port] [node_id]");
         exit(1);
     }
     char* ipaddr = argv[1];
     char* port = argv[2];
+    char* res;
+    int node_id = strtol(argv[3], &res, 10);
     int sockfd_tcp, new_fd_tcp;  // TCP: listen on sock_fd, new connection on new_fd
     int sockfd_udp;
     int num_bytes;
