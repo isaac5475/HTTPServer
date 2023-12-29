@@ -35,6 +35,7 @@
 #define STATUS_CODE_201 "HTTP/1.1 201 Created\r\nContent-Length: 0\r\n\r\n"
 #define STATUS_CODE_204 "HTTP/1.1 204 No Content\r\nContent-Length: 0\r\n\r\n"
 #define STATUS_CODE_403 "HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\n\r\n"
+#define STATUS_CODE_503 "HTTP/1.1 503 Service Unavailable\r\nRetry-After: 1\r\nContent-Length: 0\r\n\r\n"
 #define DYNAMIC_ROUTE "/dynamic/"
 
 

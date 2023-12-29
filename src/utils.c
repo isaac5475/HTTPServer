@@ -162,9 +162,10 @@ void request_handler(int fd, char* msgPrefix, struct data* data) {
                 send(fd, STATUS_CODE_501, strlen(STATUS_CODE_501), 0);
                 free_httpRequest(requests[i]);
             } else {
-                char buf[256];
-                sprintf(buf, "HTTP/1.1 303 See Other\r\nContent-Length: 0\r\nLocation: http://%s:%d%s\r\n\r\n", data->dhtInstance->succ_ip, data->dhtInstance->succ_port, requests[i]->route);
-                send(fd, buf, strlen(buf), 0);
+                send(fd, STATUS_CODE_503, strlen(STATUS_CODE_503), 0);
+//                char buf[256];
+//                sprintf(buf, "HTTP/1.1 303 See Other\r\nContent-Length: 0\r\nLocation: http://%s:%d%s\r\n\r\n", data->dhtInstance->succ_ip, data->dhtInstance->succ_port, requests[i]->route);
+//                send(fd, buf, strlen(buf), 0);
             }
 
         }
