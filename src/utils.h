@@ -65,6 +65,8 @@ struct data {
     struct dht* dhtInstance;
     struct addrinfo* p;
     int udpfd;
+    char* ipaddr;
+    uint16_t port;
 };
 struct dht {
     uint16_t node_id;
