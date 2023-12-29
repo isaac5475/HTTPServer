@@ -52,7 +52,7 @@ int main(int varc, char* argv[])
     socklen_t addr_len;
     char s[INET6_ADDRSTRLEN];
     char buf[REQUEST_LEN];
-    struct dynamicResource* dynamicResources[MAX_RESOURCES_AMOUNT];
+    struct dynamicResource dynamicResources[MAX_RESOURCES_AMOUNT];
     memset(dynamicResources, 0, MAX_RESOURCES_AMOUNT * sizeof(struct  dynamicResource*));
     sa.sa_handler = sigchld_handler; // reap all dead processes
     sigemptyset(&sa.sa_mask);
@@ -111,8 +111,15 @@ int main(int varc, char* argv[])
 
                 char msgPrefix[REQUEST_LEN];
                 memset(msgPrefix, 0, REQUEST_LEN);
-
-                request_handler(new_fd_tcp, msgPrefix, dynamicResources);
+                struct data data;
+                data.dynamicResources = &dynamicResources;
+                data.node_id = node_id;
+                struct dht dhtInstance;
+                memset(&dhtInstance, 0, sizeof(struct dht));
+                populate_dht_struct(&dhtInstance);
+                dhtInstance.node_id = atol(argv[3]);
+                data.dhtInstance = &dhtInstance;
+                request_handler(new_fd_tcp, msgPrefix, &data);
                 close(new_fd_tcp);
             }
         }

@@ -21,6 +21,7 @@
 #include <signal.h>
 #include "sys/shm.h"
 #include <time.h>
+#include <openssl/sha.h>
 
 #define REQUEST_LEN 8192
 #define MAX_HEADERS_AMOUNT 40
@@ -57,10 +58,23 @@ struct httpRequest {
     int status;
 };
 
-
+struct data {
+    struct dynamicResource **dynamicResources;
+    int node_id;
+    struct dht* dhtInstance;
+};
+struct dht {
+    uint16_t node_id;
+    uint16_t prev_node_id;
+    uint16_t succ_id;
+    char* prev_ip;
+    int prev_port;
+    char* succ_ip;
+    int succ_port;
+};
 int start_server_tcp(char* ipaddr, char* port, int* sockfd);
 int start_server_udp(char* ipaddr, char* port, int* sockfd);
-void request_handler(int fd, char* msgPrefix, struct dynamicResource* dynamicResources[MAX_RESOURCES_AMOUNT]);
+void request_handler(int fd, char* msgPrefix, struct data* data);
 int parse_requests(char* msg, struct httpRequest* reqs[10], int* position);
 int parse_request(char* msg, struct httpRequest* req);
 int parse_headers(char* msg, struct header* headers[]);
@@ -73,4 +87,7 @@ int delete_dynamic_record(char* requestedRoute, struct dynamicResource* dynamicR
 void free_httpRequest(struct httpRequest* req);
 char* append_strings(char* str1, char* str2);
 void free_dynamic_records(struct dynamicResource* dynamicResources[MAX_RESOURCES_AMOUNT]);
+uint16_t hash(const char* str);
+int get_prev_node_id();
+int populate_dht_struct(struct dht* dht);
 #endif //RN_PRAXIS_UTILS_H

@@ -94,7 +94,7 @@ int start_server_udp(char* ipaddr, char* port, int* sockfd) {
 }
 
 
-void request_handler(int fd, char* msgPrefix, struct dynamicResource* dynamicResources[MAX_RESOURCES_AMOUNT]) {
+void request_handler(int fd, char* msgPrefix, struct data* data) {
     while (1) { //Connection remains open until closed client-side
         char msgBuf[REQUEST_LEN];
         memset(msgBuf, 0, REQUEST_LEN);
@@ -141,24 +141,32 @@ void request_handler(int fd, char* msgPrefix, struct dynamicResource* dynamicRes
                 continue;
             }
 
+            uint16_t hashed = hash(requests[i]->route);
+            if ((hashed <= data->node_id && hashed > data->dhtInstance->prev_node_id)
+            || (data->dhtInstance->prev_node_id > data->node_id && (hashed > data->dhtInstance->prev_node_id || hashed <= data->dhtInstance->node_id))) { //prevnode < hashed < node_id
+                if (strncmp(requests[i]->HTTPMethode, "GET", strlen("GET")) == 0) {
+                    get_handler(fd, requests[i], data->dynamicResources);
+                    free_httpRequest((requests[i]));
+                    continue;
+                }
+                if (strncmp(requests[i]->HTTPMethode, "PUT", strlen("PUT")) == 0) {
+                    put_handler(fd, requests[i], data->dynamicResources);
+                    free_httpRequest((requests[i]));
+                    continue;
+                }
+                if (strncmp(requests[i]->HTTPMethode, "DELETE", strlen("DELETE")) == 0) {
+                    delete_handler(fd, requests[i], data->dynamicResources);
+                    free_httpRequest((requests[i]));
+                    continue;
+                }
+                send(fd, STATUS_CODE_501, strlen(STATUS_CODE_501), 0);
+                free_httpRequest(requests[i]);
+            } else {
+                char buf[256];
+                sprintf(buf, "HTTP/1.1 303 See Other\r\nLocation: http://%s:%d%s\r\n\r\n", data->dhtInstance->succ_ip, data->dhtInstance->succ_port, requests[i]->route);
+                send(fd, buf, strlen(buf), 0);
+            }
 
-            if (strncmp(requests[i]->HTTPMethode, "GET", strlen("GET")) == 0) {
-                get_handler(fd, requests[i], dynamicResources);
-                free_httpRequest((requests[i]));
-                continue;
-            }
-            if (strncmp(requests[i]->HTTPMethode, "PUT", strlen("PUT")) == 0) {
-                put_handler(fd, requests[i], dynamicResources);
-                free_httpRequest((requests[i]));
-                continue;
-            }
-            if (strncmp(requests[i]->HTTPMethode, "DELETE", strlen("DELETE")) == 0) {
-                delete_handler(fd, requests[i], dynamicResources);
-                free_httpRequest((requests[i]));
-                continue;
-            }
-            send(fd, STATUS_CODE_501, strlen(STATUS_CODE_501), 0);
-            free_httpRequest(requests[i]);
         }
         free(requests);
 //        return;
@@ -473,4 +481,50 @@ void free_dynamic_records(struct dynamicResource* dynamicResources[MAX_RESOURCES
         free(dynamicResources[i]->key);
         free(dynamicResources[i]->value);
     }
+}
+
+uint16_t hash(const char* str) {
+     uint8_t digest[SHA256_DIGEST_LENGTH];
+     SHA256((uint8_t *)str, strlen(str), digest);
+     return htons(*((uint16_t *)digest)); // We only use the first two bytes here
+     }
+int get_prev_node_id() {
+    char* res = getenv("SUCC_ID");
+    if (res == NULL) {
+        return -1;
+    }
+    char* s;
+    int id = strtol(res, &s, 10);
+    return id;
+}
+int populate_dht_struct(struct dht* dht) {
+   char* pred_id = getenv("PRED_ID");
+   if (pred_id == NULL) {
+       dht->prev_node_id = 0;
+   } else {
+       dht->prev_node_id = atol(pred_id);
+   }
+   char* pred_ip = getenv("PRED_IP");
+   if (pred_ip != NULL) {
+       dht->prev_ip = calloc(1, strlen(pred_ip) + 1);
+       strncpy(dht->prev_ip, pred_ip, strlen(pred_ip));
+   }
+   char* pred_port = getenv("PRED_PORT");
+   if (pred_port != NULL) {
+       dht->prev_port = atol(pred_port);
+   }
+   char* succ_id = getenv("SUCC_ID");
+   if (succ_id != NULL) {
+       dht->succ_id = atol(succ_id);
+   }
+   char* succ_ip = getenv("SUCC_IP");
+   if (succ_ip != NULL) {
+       dht->succ_ip = calloc(1, strlen(succ_ip) + 1);
+       strncpy(dht->succ_ip, succ_ip, strlen(succ_ip));
+   }
+   char* succ_port = getenv("SUCC_PORT");
+   if (succ_port != NULL) {
+       dht->succ_port = atol(succ_port);
+   }
+    return 0;
 }

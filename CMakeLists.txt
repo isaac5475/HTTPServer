@@ -15,4 +15,6 @@ add_executable(webserver
         src/udp.h)
 set(CMAKE_BUILD_TYPE Debug)
 set(CPACK_VERBATIM_VARIABLES YES)
+find_package(OpenSSL REQUIRED)
+target_link_libraries(webserver PRIVATE ${OPENSSL_LIBRARIES} -lm)
 include(CPack)
