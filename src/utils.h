@@ -63,6 +63,8 @@ struct data {
     struct dynamicResource **dynamicResources;
     int node_id;
     struct dht* dhtInstance;
+    struct addrinfo* p;
+    int udpfd;
 };
 struct dht {
     uint16_t node_id;
@@ -74,7 +76,7 @@ struct dht {
     int succ_port;
 };
 int start_server_tcp(char* ipaddr, char* port, int* sockfd);
-int start_server_udp(char* ipaddr, char* port, int* sockfd);
+struct addrinfo* start_server_udp(char* ipaddr, char* port, int* sockfd);
 void request_handler(int fd, char* msgPrefix, struct data* data);
 int parse_requests(char* msg, struct httpRequest* reqs[10], int* position);
 int parse_request(char* msg, struct httpRequest* req);
@@ -91,4 +93,5 @@ void free_dynamic_records(struct dynamicResource* dynamicResources[MAX_RESOURCES
 uint16_t hash(const char* str);
 int get_prev_node_id();
 int populate_dht_struct(struct dht* dht);
+int send_lookup(int fd, struct dht* dht, uint16_t hash, struct addrinfo *p);
 #endif //RN_PRAXIS_UTILS_H

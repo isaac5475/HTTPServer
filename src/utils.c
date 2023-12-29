@@ -49,7 +49,7 @@ int start_server_tcp(char* ipaddr, char* port, int* sockfd) {
     }
 }
 
-int start_server_udp(char* ipaddr, char* port, int* sockfd) {
+struct addrinfo* start_server_udp(char* ipaddr, char* port, int* sockfd) {
     struct addrinfo hints, *servinfo, *p;
     int yes = 1;
     memset(&hints, 0, sizeof hints);
@@ -60,7 +60,7 @@ int start_server_udp(char* ipaddr, char* port, int* sockfd) {
 
     if ((rv = getaddrinfo(ipaddr, port, &hints, &servinfo)) != 0) {
         fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
-        return 1;
+        return NULL;
     }
 
     // loop through all the results and bind to the first we can
@@ -91,6 +91,7 @@ int start_server_udp(char* ipaddr, char* port, int* sockfd) {
         fprintf(stderr, "server: failed to bind\n");
         exit(1);
     }
+    return p;
 }
 
 
@@ -163,6 +164,7 @@ void request_handler(int fd, char* msgPrefix, struct data* data) {
                 free_httpRequest(requests[i]);
             } else {
                 send(fd, STATUS_CODE_503, strlen(STATUS_CODE_503), 0);
+                send_lookup(data->udpfd, data->dhtInstance, hashed, data->p);
 //                char buf[256];
 //                sprintf(buf, "HTTP/1.1 303 See Other\r\nContent-Length: 0\r\nLocation: http://%s:%d%s\r\n\r\n", data->dhtInstance->succ_ip, data->dhtInstance->succ_port, requests[i]->route);
 //                send(fd, buf, strlen(buf), 0);
@@ -528,4 +530,40 @@ int populate_dht_struct(struct dht* dht) {
        dht->succ_port = atol(succ_port);
    }
     return 0;
+}
+
+int send_lookup(int fd, struct dht* dht, uint16_t hash, struct addrinfo* p) {
+    struct in_addr ip_address;
+    // Convert string to binary form (4 bytes)
+    if (inet_pton(AF_INET, dht->succ_ip, &ip_address) <= 0) {
+        perror("inet_pton");
+        return -1;  // Conversion failed
+    }
+
+    // Access the binary form of the IP address
+    uint8_t buf[11];
+    memset(&buf, 0, 1);
+    int offset = 0;
+    buf[0] = 0;
+    offset++;
+    memcpy(buf + offset, &hash, sizeof(uint16_t)); //hash of resource
+    offset += sizeof(uint16_t);
+
+    memcpy(buf + offset, &dht->succ_id, sizeof(uint16_t)); //succ_node_id
+    offset += sizeof(uint16_t);
+    memcpy(buf + offset, &ip_address.s_addr, sizeof(in_addr_t)); //ip of succ node
+    offset += sizeof(in_addr_t);
+    memcpy(buf + offset, &dht->succ_port, sizeof(uint16_t)); //port of succ
+    offset += sizeof(uint16_t);
+
+    struct sockaddr_in node_addr;
+    memset(&node_addr, 0, sizeof(node_addr));
+
+    node_addr.sin_family = AF_INET;
+    node_addr.sin_port = dht->succ_port;
+//    node_addr.sin_port = 12345;
+    node_addr.sin_addr = ip_address;
+
+    int bytes_sent = sendto(fd, buf, sizeof(buf), 0, (struct sockaddr*)&node_addr, sizeof(node_addr));
+    return bytes_sent;
 }
