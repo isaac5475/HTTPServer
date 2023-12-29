@@ -533,36 +533,34 @@ int populate_dht_struct(struct dht* dht) {
 }
 
 int send_lookup(int fd, struct dht* dht, uint16_t hash, struct addrinfo* p) {
-    struct in_addr ip_address;
-    // Convert string to binary form (4 bytes)
-    if (inet_pton(AF_INET, dht->succ_ip, &ip_address) <= 0) {
-        perror("inet_pton");
-        return -1;  // Conversion failed
-    }
 
     // Access the binary form of the IP address
     uint8_t buf[11];
-    memset(&buf, 0, 1);
     int offset = 0;
-    buf[0] = 0;
+    buf[0] = 0; //code of lookup
     offset++;
-    memcpy(buf + offset, &hash, sizeof(uint16_t)); //hash of resource
+
+    uint16_t hashN = htons(hash);
+    memcpy(buf + offset, &hashN, sizeof(uint16_t)); //hash of resource
     offset += sizeof(uint16_t);
 
-    memcpy(buf + offset, &dht->succ_id, sizeof(uint16_t)); //succ_node_id
+    uint16_t node_idN = htons(dht->node_id);
+    memcpy(buf + offset, &node_idN, sizeof(uint16_t)); //succ_node_id
     offset += sizeof(uint16_t);
-    memcpy(buf + offset, &ip_address.s_addr, sizeof(in_addr_t)); //ip of succ node
+
+    struct sockaddr_in* node__addr = (struct sockaddr_in*)p->ai_addr;
+    memcpy(buf + offset, &node__addr->sin_addr.s_addr, sizeof(in_addr_t)); //ip of succ node //here shoud be the address of p
     offset += sizeof(in_addr_t);
-    memcpy(buf + offset, &dht->succ_port, sizeof(uint16_t)); //port of succ
-    offset += sizeof(uint16_t);
+
+    uint16_t succ_portN = htons(4711);
+    memcpy(buf + offset, &succ_portN, sizeof(uint16_t)); //port of succ
 
     struct sockaddr_in node_addr;
     memset(&node_addr, 0, sizeof(node_addr));
 
     node_addr.sin_family = AF_INET;
-    node_addr.sin_port = dht->succ_port;
-//    node_addr.sin_port = 12345;
-    node_addr.sin_addr = ip_address;
+    node_addr.sin_port = htons(dht->succ_port);
+    inet_pton(AF_INET, dht->succ_ip, &node_addr.sin_addr);
 
     int bytes_sent = sendto(fd, buf, sizeof(buf), 0, (struct sockaddr*)&node_addr, sizeof(node_addr));
     return bytes_sent;
