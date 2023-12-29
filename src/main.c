@@ -46,7 +46,8 @@ int main(int varc, char* argv[])
     int sockfd_tcp, new_fd_tcp;  // TCP: listen on sock_fd, new connection on new_fd
     int sockfd_udp;
     int num_bytes;
-    struct sockaddr_storage their_addr_tcp, their_addr_udp; // connector's address information
+    struct sockaddr_storage their_addr_tcp; // connector's address information
+    struct sockaddr_in their_addr_udp;
     struct sigaction sa;
     socklen_t sin_size;
     socklen_t addr_len;
@@ -63,6 +64,12 @@ int main(int varc, char* argv[])
         exit(1);
     }
 
+    struct dht dhtInstance;
+    memset(&dhtInstance, 0, sizeof(struct dht));
+    populate_dht_struct(&dhtInstance);
+    dhtInstance.node_id = atol(argv[3]);
+    data.dhtInstance = &dhtInstance;
+
     start_server_tcp(ipaddr, port, &sockfd_tcp);
     data.p = start_server_udp(ipaddr, port, &sockfd_udp);
     data.udpfd = sockfd_udp;
@@ -72,9 +79,11 @@ int main(int varc, char* argv[])
         exit(1);
     }
         while (1) {  // main loop
+            uint8_t udp_buff[11];
+            memset(udp_buff, 0, 11);
             addr_len = sizeof their_addr_udp;
-            ssize_t bytes_read = recvfrom(sockfd_udp, buf, REQUEST_LEN - 1, 0,
-                                (struct sockaddr *) &their_addr_udp, &addr_len);
+            ssize_t bytes_read = recvfrom(sockfd_udp, udp_buff, 11, 0,
+                                (struct sockaddr *)&their_addr_udp, &addr_len);
             if (bytes_read == -1) {
                 if (errno == EAGAIN || errno == EWOULDBLOCK) {
                 // Do nothing
@@ -83,13 +92,12 @@ int main(int varc, char* argv[])
                     exit(1);
                 }
             } else if (bytes_read > 0) {
-                printf("listener: got packet from %s\n",
-                       inet_ntop(their_addr_udp.ss_family,
-                                 get_in_addr((struct sockaddr *) &their_addr_udp),
-                                 s, sizeof s));
-                printf("listener: packet is %d bytes long\n", num_bytes);
-                buf[num_bytes] = '\0';
-                udp_handler(buf);
+//                printf("listener: got packet from %s\n",
+//                       inet_ntop(their_addr_udp.ss_family,
+//                                 get_in_addr((struct sockaddr *) &their_addr_udp),
+//                                 s, sizeof s));
+                printf("listener: packet is %d bytes long\n", bytes_read);
+                udp_handler(udp_buff, data.udpfd, (struct sockaddr*)&their_addr_udp, addr_len, &data, data.dhtInstance);
             }
 
             //tcp handler
@@ -115,11 +123,6 @@ int main(int varc, char* argv[])
                 memset(msgPrefix, 0, REQUEST_LEN);
                 data.dynamicResources = &dynamicResources;
                 data.node_id = node_id;
-                struct dht dhtInstance;
-                memset(&dhtInstance, 0, sizeof(struct dht));
-                populate_dht_struct(&dhtInstance);
-                dhtInstance.node_id = atol(argv[3]);
-                data.dhtInstance = &dhtInstance;
                 request_handler(new_fd_tcp, msgPrefix, &data);
                 close(new_fd_tcp);
             }
