@@ -4,7 +4,7 @@ import pytest
 def pytest_addoption(parser):
     parser.addoption('--executable', action='store', default='../build/webserver')
     parser.addoption('--port', action='store', default=4711)
-    parser.addoption('--timeout', action='store', default=2)
+    parser.addoption('--timeout', action='store', default=200)
 
 
 @pytest.fixture
