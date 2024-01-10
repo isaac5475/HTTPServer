@@ -96,100 +96,104 @@ struct addrinfo* start_server_udp(char* ipaddr, char* port, int* sockfd) {
 
 
 void request_handler(int fd, char* msgPrefix, struct data* data) {
-    while (1) { //Connection remains open until closed client-side
-        char msgBuf[REQUEST_LEN];
-        memset(msgBuf, 0, REQUEST_LEN);
-        int recvRes = recv(fd, msgBuf, REQUEST_LEN, 0);
-        if (recvRes == -1) {
-            continue;
-        }
-        if (recvRes == 0) {
-            printf("connection reset\r\n");
-            return;
-        }
-        char* newMsg = calloc(REQUEST_LEN, 1);
-        if (strlen(msgPrefix) != 0) {
-            strncat(newMsg, msgPrefix, strlen(msgPrefix));
-            memset(msgPrefix, 0, REQUEST_LEN);
-            strncat(newMsg, msgBuf, strlen(msgBuf));
-        } else {
-            strncpy(newMsg, msgBuf, strlen(msgBuf));
-        }
-        int position = 0;
-        struct httpRequest** requests = calloc(10, sizeof(struct httpRequest*));
-        int parse_res = parse_requests(newMsg, requests, &position);
-        if (position != strlen(newMsg)) { //if we couldn't parse the end of the incoming message, save it till next time
-            size_t remainingLength = strlen(newMsg) - position;
-            strncpy(msgPrefix, newMsg + position, remainingLength);
-            msgPrefix[remainingLength] = '\0';
-        } else if (requests[parse_res-1]->status == -2) {
-            strncpy(msgPrefix, newMsg, strlen(newMsg));
-        }
-        free(newMsg);
-//        printf("-----------------------\r\n");
-        if (parse_res == 0) {
-            continue;
-        }
-        for (int i = 0; i < parse_res; i++) {
-
-            if (requests[i]->status == -1) {
-                send(fd, STATUS_CODE_400, strlen(STATUS_CODE_400), 0);
-                free_httpRequest((requests[i]));
-                continue;
-            }
-            if (requests[i]->status == -2) {
-                free_httpRequest((requests[i]));
-                continue;
-            }
-
-            uint16_t hashed = hash(requests[i]->route);
-            if ((hashed <= data->node_id && hashed > data->dhtInstance->prev_node_id)
-            || (data->dhtInstance->prev_node_id > data->node_id && (hashed > data->dhtInstance->prev_node_id || hashed <= data->dhtInstance->node_id))) { //prevnode < hashed < node_id
-                if (strncmp(requests[i]->HTTPMethode, "GET", strlen("GET")) == 0) {
-                    get_handler(fd, requests[i], data->dynamicResources);
-                    free_httpRequest((requests[i]));
-                    continue;
-                }
-                if (strncmp(requests[i]->HTTPMethode, "PUT", strlen("PUT")) == 0) {
-                    put_handler(fd, requests[i], data->dynamicResources);
-                    free_httpRequest((requests[i]));
-                    continue;
-                }
-                if (strncmp(requests[i]->HTTPMethode, "DELETE", strlen("DELETE")) == 0) {
-                    delete_handler(fd, requests[i], data->dynamicResources);
-                    free_httpRequest((requests[i]));
-                    continue;
-                }
-                send(fd, STATUS_CODE_501, strlen(STATUS_CODE_501), 0);
-                free_httpRequest(requests[i]);
-            } else {
-                printf("in dht phase\r\n");
-                printf("last known hash: %d and node_id: %d\n", data->hash_records[data->oldest_record]->hash_id, data->hash_records[data->oldest_record]->node_id);
-                uint8_t hash_is_known = 0;
-
-                for (int j = 0; j < 10; j++) {
-                    if ((hashed <= data->hash_records[j]->node_id && hashed > data->hash_records[j]->hash_id)
-                        || (data->hash_records[j]->hash_id > data->hash_records[j]->node_id && (hashed > data->hash_records[j]->hash_id || hashed <= data->hash_records[j]->node_id))) { //prevnode < hashed < node_id
-                        char reply[512];
-                        printf("shoud send 303\r\n");
-                        sprintf(reply, "HTTP/1.1 303 See Other\r\nLocation: http://%s/%s\r\nContent-Length: 0\r\n\r\n",
-                                data->hash_records[j]->host, requests[i]->route);
-                        send(fd, reply, strlen(reply), 0);
-                        hash_is_known = 1;
-                        break;
-                    }
-                }
-                if (hash_is_known == 0) {
-                    send(fd, STATUS_CODE_503, strlen(STATUS_CODE_503), 0);
-                    send_lookup(data->udpfd, data->dhtInstance, hashed, data->p);
-                    printf("sent 503\n");
-                }
-            }
-
-        }
-        free(requests);
-//        return;
+    char msgBuf[REQUEST_LEN];
+    memset(msgBuf, 0, REQUEST_LEN);
+    int recvRes = recv(fd, msgBuf, REQUEST_LEN, 0);
+    if (recvRes == 0) {
+        printf("selectserver: socket %d hung up\n", fd);
+        close(fd);
+        FD_CLR(fd, data->fdset);
+        return;
     }
+    char* newMsg = calloc(REQUEST_LEN, 1);
+    if (newMsg == NULL) {
+        perror("calloc");
+        exit(1);
+    }
+
+    if (strlen(msgPrefix) != 0) {
+        strncat(newMsg, msgPrefix, strlen(msgPrefix));
+        memset(msgPrefix, 0, REQUEST_LEN);
+        strncat(newMsg, msgBuf, strlen(msgBuf));
+    } else {
+        strncpy(newMsg, msgBuf, strlen(msgBuf) + 1);
+    }
+    int position = 0;
+    printf("TCP message: %s\n", newMsg);
+    struct httpRequest** requests = calloc(10, sizeof(struct httpRequest*));
+    int parse_res = parse_requests(newMsg, requests, &position);
+    if (position != strlen(newMsg)) { //if we couldn't parse the end of the incoming message, save it till next time
+        size_t remainingLength = strlen(newMsg) - position;
+        strncpy(msgPrefix, newMsg + position, remainingLength);
+        msgPrefix[remainingLength] = '\0';
+    } else if (requests[parse_res-1]->status == -2) {
+        strncpy(msgPrefix, newMsg, strlen(newMsg));
+    }
+    free(newMsg);
+//        printf("-----------------------\r\n");
+    if (parse_res == 0) {
+        return;
+    }
+    for (int i = 0; i < parse_res; i++) {
+
+        if (requests[i]->status == -1) {
+            send(fd, STATUS_CODE_400, strlen(STATUS_CODE_400), 0);
+            free_httpRequest((requests[i]));
+            continue;
+        }
+        if (requests[i]->status == -2) {
+            free_httpRequest((requests[i]));
+            continue;
+        }
+
+        uint16_t hashed = hash(requests[i]->route);
+        if (1) {
+        if ((hashed <= data->node_id && hashed > data->dhtInstance->prev_node_id)
+        || (data->dhtInstance->prev_node_id > data->node_id && (hashed > data->dhtInstance->prev_node_id || hashed <= data->dhtInstance->node_id))) { //prevnode < hashed < node_id
+            if (strncmp(requests[i]->HTTPMethode, "GET", strlen("GET")) == 0) {
+                get_handler(fd, requests[i], data->dynamicResources);
+                free_httpRequest((requests[i]));
+                continue;
+            }
+            if (strncmp(requests[i]->HTTPMethode, "PUT", strlen("PUT")) == 0) {
+                put_handler(fd, requests[i], data->dynamicResources);
+                free_httpRequest((requests[i]));
+                continue;
+            }
+            if (strncmp(requests[i]->HTTPMethode, "DELETE", strlen("DELETE")) == 0) {
+                delete_handler(fd, requests[i], data->dynamicResources);
+                free_httpRequest((requests[i]));
+                continue;
+            }
+            send(fd, STATUS_CODE_501, strlen(STATUS_CODE_501), 0);
+            free_httpRequest(requests[i]);
+        } else {
+            printf("in dht phase\r\n");
+            printf("last known hash: %d and node_id: %d\n", data->hash_records[data->oldest_record]->hash_id, data->hash_records[data->oldest_record]->node_id);
+            uint8_t hash_is_known = 0;
+
+            for (int j = 0; j < 10; j++) {
+                if ((hashed <= data->hash_records[j]->node_id && hashed > data->hash_records[j]->hash_id)
+                    || (data->hash_records[j]->hash_id > data->hash_records[j]->node_id && (hashed > data->hash_records[j]->hash_id || hashed <= data->hash_records[j]->node_id))) { //prevnode < hashed < node_id
+                    char reply[512];
+                    printf("shoud send 303\r\n");
+                    sprintf(reply, "HTTP/1.1 303 See Other\r\nLocation: http://%s/%s\r\nContent-Length: 0\r\n\r\n",
+                            data->hash_records[j]->host, requests[i]->route + 1);
+                    send(fd, reply, strlen(reply), 0);
+                    hash_is_known = 1;
+                    break;
+                }
+            }
+            if (hash_is_known == 0) {
+                send(fd, STATUS_CODE_503, strlen(STATUS_CODE_503), 0);
+                send_lookup(data->udpfd, data->dhtInstance, hashed, data->p);
+                printf("sent 503\n");
+            }
+        }
+
+    }
+    free(requests);
+//        return;
 }
 
 void put_handler(int fd, struct httpRequest *req, struct dynamicResource* dynamicResources[MAX_RESOURCES_AMOUNT]) {
@@ -584,4 +588,16 @@ int send_lookup(int fd, struct dht* dht, uint16_t hash, struct addrinfo* p) {
     int bytes_sent = sendto(fd, buf, sizeof(buf), 0, (struct sockaddr*)&node_addr, sizeof(node_addr));
     printf("lookup sent %d bytes, to %s:%d\n", bytes_sent, dht->succ_ip, dht->succ_port);
     return bytes_sent;
+}
+
+void populate_hash_records(struct data* data) {
+//    struct hash_record* hashR1= data->hash_records[0];
+//    hashR1->node_id = data->dhtInstance->prev_node_id;
+//    sprintf(hashR1->host, "%s:%d", data->dhtInstance->prev_ip, data->dhtInstance->prev_port);
+
+    struct hash_record* hashR2= data->hash_records[1];
+    hashR2->node_id = data->dhtInstance->succ_id;
+    sprintf(hashR2->host, "%s:%d", data->dhtInstance->succ_ip, data->dhtInstance->succ_port);
+
+    data->oldest_record += 2;
 }

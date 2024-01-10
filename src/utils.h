@@ -71,6 +71,7 @@ struct data {
     uint16_t port;
     struct hash_record** hash_records;
     uint8_t oldest_record;
+    fd_set *fdset;
 };
 struct dht {
     uint16_t node_id;
@@ -107,4 +108,5 @@ uint16_t hash(const char* str);
 int get_prev_node_id();
 int populate_dht_struct(struct dht* dht);
 int send_lookup(int fd, struct dht* dht, uint16_t hash, struct addrinfo *p);
+void populate_hash_records(struct data* data);
 #endif //RN_PRAXIS_UTILS_H

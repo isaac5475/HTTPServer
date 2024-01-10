@@ -31,7 +31,7 @@ void udp_handler(uint8_t* buff, int fd, struct sockaddr* ipaddr, socklen_t addr_
     node_port = ntohs(node_port);
 
     if (mode == LOOKUP_MODE) {
-        printf("in lookup mode");
+        printf("in lookup mode\n");
         //if we are node responsible for resource;
         if ((hash <= dht->succ_id && hash > data->dhtInstance->node_id)
             || (data->dhtInstance->node_id > data->dhtInstance->succ_id && (hash > data->dhtInstance->node_id || hash <= data->dhtInstance->succ_id))) { //prevnode < hashed < node_id -> currNode is repsponsible
@@ -63,6 +63,7 @@ void udp_handler(uint8_t* buff, int fd, struct sockaddr* ipaddr, socklen_t addr_
             int bytes_sent = sendto(fd, buf, 11, 0, (struct sockaddr*)&addr_to_send, sizeof(addr_to_send));
             printf("reply sent, bytes: %d, to: %s\n", bytes_sent, their_addr_str);
         } else {
+            printf("forwarding to next node %s:%p", dht->succ_ip, dht->succ_port);
             struct sockaddr_in node_addr; //current node isn't responsible for resource, pass forward
             memset(&node_addr, 0, sizeof(node_addr));
 
@@ -73,6 +74,7 @@ void udp_handler(uint8_t* buff, int fd, struct sockaddr* ipaddr, socklen_t addr_
             sendto(fd, buff,11, 0, (struct sockaddr*)&node_addr, sizeof(node_addr));
         }
     } else if (buff[0] == RESULT_MODE) {
+        printf("In result mode\n");
         printf("got udp response, should add to table\r\n");
         printf("hash in msg is %d.\nand length: %d", (unsigned int)hash, 11);
         uint8_t i = data->oldest_record;
@@ -80,5 +82,6 @@ void udp_handler(uint8_t* buff, int fd, struct sockaddr* ipaddr, socklen_t addr_
         data->hash_records[i]->hash_id = hash;
         data->hash_records[i]->node_id = currNode;
         sprintf(data->hash_records[i]->host, "%s:%d", their_addr_str, node_port);
+        printf("added hash: %d\n", data->hash_records[i]->hash_id);
     }
 }
