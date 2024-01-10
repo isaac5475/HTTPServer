@@ -35,10 +35,10 @@ void *get_in_addr(struct sockaddr *sa)
 
 int main(int varc, char* argv[])
 {
-    if (varc != 4) {
-        fprintf(stderr, "Usage: webserver [ipaddr] [port] [node_id]");
-        exit(1);
-    }
+//    if (varc < 3) {
+//        fprintf(stderr, "Usage: webserver [ipaddr] [port] [node_id]");
+//        exit(1);
+//    }
     char* ipaddr = argv[1];
     char* port = argv[2];
     char* res;
@@ -69,10 +69,21 @@ int main(int varc, char* argv[])
     populate_dht_struct(&dhtInstance);
     dhtInstance.node_id = atol(argv[3]);
     data.dhtInstance = &dhtInstance;
+    data.dhtInstance->node_ip = calloc(1, strlen(ipaddr)+1);
+    memcpy(data.dhtInstance->node_ip, ipaddr, strlen(ipaddr));
+    data.dhtInstance->node_port = atol(port);
 
     start_server_tcp(ipaddr, port, &sockfd_tcp);
     data.p = start_server_udp(ipaddr, port, &sockfd_udp);
     data.udpfd = sockfd_udp;
+    data.oldest_record = 0;
+    struct hash_record* hash_records[10];
+    for (int i = 0; i < 10; i++) {
+        hash_records[i] = calloc(1, sizeof(struct hash_record));
+    }
+    data.hash_records = (struct hash_record **) hash_records;
+    data.dynamicResources = &dynamicResources;
+    data.node_id = node_id;
 
     if (listen(sockfd_tcp, BACKLOG) == -1) {
         perror("listen");
@@ -121,8 +132,6 @@ int main(int varc, char* argv[])
 
                 char msgPrefix[REQUEST_LEN];
                 memset(msgPrefix, 0, REQUEST_LEN);
-                data.dynamicResources = &dynamicResources;
-                data.node_id = node_id;
                 request_handler(new_fd_tcp, msgPrefix, &data);
                 close(new_fd_tcp);
             }

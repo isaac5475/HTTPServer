@@ -27,6 +27,8 @@
 #define MAX_HEADERS_AMOUNT 40
 #define MAX_RESOURCES_AMOUNT 100
 #define BACKLOG 10   // how many pending connections queue will hold
+#define MAX_HOSTNAME_LEN 64
+
 #define STATUS_CODE_400 "HTTP/1.1 400 Bad Request\r\n\r\n"
 #define STATUS_CODE_400_CL "HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\n\r\n"
 #define STATUS_CODE_404 "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n"
@@ -67,15 +69,24 @@ struct data {
     int udpfd;
     char* ipaddr;
     uint16_t port;
+    struct hash_record** hash_records;
+    uint8_t oldest_record;
 };
 struct dht {
     uint16_t node_id;
+    char* node_ip;
+    uint16_t node_port;
     uint16_t prev_node_id;
     uint16_t succ_id;
     char* prev_ip;
     int prev_port;
     char* succ_ip;
     int succ_port;
+};
+struct hash_record {
+    uint16_t node_id;
+    uint16_t hash_id;
+    char host[MAX_HOSTNAME_LEN];
 };
 int start_server_tcp(char* ipaddr, char* port, int* sockfd);
 struct addrinfo* start_server_udp(char* ipaddr, char* port, int* sockfd);

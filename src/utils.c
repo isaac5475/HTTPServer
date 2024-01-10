@@ -163,11 +163,27 @@ void request_handler(int fd, char* msgPrefix, struct data* data) {
                 send(fd, STATUS_CODE_501, strlen(STATUS_CODE_501), 0);
                 free_httpRequest(requests[i]);
             } else {
-                send(fd, STATUS_CODE_503, strlen(STATUS_CODE_503), 0);
-                send_lookup(data->udpfd, data->dhtInstance, hashed, data->p);
-//                char buf[256];
-//                sprintf(buf, "HTTP/1.1 303 See Other\r\nContent-Length: 0\r\nLocation: http://%s:%d%s\r\n\r\n", data->dhtInstance->succ_ip, data->dhtInstance->succ_port, requests[i]->route);
-//                send(fd, buf, strlen(buf), 0);
+                printf("in dht phase\r\n");
+                printf("last known hash: %d and node_id: %d\n", data->hash_records[data->oldest_record]->hash_id, data->hash_records[data->oldest_record]->node_id);
+                uint8_t hash_is_known = 0;
+
+                for (int j = 0; j < 10; j++) {
+                    if ((hashed <= data->hash_records[j]->node_id && hashed > data->hash_records[j]->hash_id)
+                        || (data->hash_records[j]->hash_id > data->hash_records[j]->node_id && (hashed > data->hash_records[j]->hash_id || hashed <= data->hash_records[j]->node_id))) { //prevnode < hashed < node_id
+                        char reply[512];
+                        printf("shoud send 303\r\n");
+                        sprintf(reply, "HTTP/1.1 303 See Other\r\nLocation: http://%s/%s\r\nContent-Length: 0\r\n\r\n",
+                                data->hash_records[j]->host, requests[i]->route);
+                        send(fd, reply, strlen(reply), 0);
+                        hash_is_known = 1;
+                        break;
+                    }
+                }
+                if (hash_is_known == 0) {
+                    send(fd, STATUS_CODE_503, strlen(STATUS_CODE_503), 0);
+                    send_lookup(data->udpfd, data->dhtInstance, hashed, data->p);
+                    printf("sent 503\n");
+                }
             }
 
         }
@@ -548,12 +564,15 @@ int send_lookup(int fd, struct dht* dht, uint16_t hash, struct addrinfo* p) {
     memcpy(buf + offset, &node_idN, sizeof(uint16_t)); //succ_node_id
     offset += sizeof(uint16_t);
 
-    struct sockaddr_in* node__addr = (struct sockaddr_in*)p->ai_addr;
-    memcpy(buf + offset, &node__addr->sin_addr.s_addr, sizeof(in_addr_t)); //ip of succ node //here shoud be the address of p
-    offset += sizeof(in_addr_t);
+    struct in_addr node__addr;
+    if (inet_pton(AF_INET, dht->node_ip, &node__addr) <= 0) {
+        perror("inet_pton");
+    }
+    memcpy(buf + offset, &node__addr.s_addr, 4);
+    offset += 4;
 
-    uint16_t succ_portN = htons(4711);
-    memcpy(buf + offset, &succ_portN, sizeof(uint16_t)); //port of succ
+    uint16_t succ_portN = htons(dht->node_port);
+    memcpy(buf + offset, &succ_portN, sizeof(uint16_t));
 
     struct sockaddr_in node_addr;
     memset(&node_addr, 0, sizeof(node_addr));
@@ -563,5 +582,6 @@ int send_lookup(int fd, struct dht* dht, uint16_t hash, struct addrinfo* p) {
     inet_pton(AF_INET, dht->succ_ip, &node_addr.sin_addr);
 
     int bytes_sent = sendto(fd, buf, sizeof(buf), 0, (struct sockaddr*)&node_addr, sizeof(node_addr));
+    printf("lookup sent %d bytes, to %s:%d\n", bytes_sent, dht->succ_ip, dht->succ_port);
     return bytes_sent;
 }
