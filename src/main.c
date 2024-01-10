@@ -42,7 +42,13 @@ int main(int varc, char* argv[])
     char* ipaddr = argv[1];
     char* port = argv[2];
     char* res;
-    int node_id = strtol(argv[3], &res, 10);
+    int node_id = 0;
+    if (varc > 3) {
+         node_id = strtol(argv[3], &res, 10);
+         if (*res != '\0') {
+             node_id = 0;
+         }
+    }
     int sockfd_tcp, new_fd_tcp;  // TCP: listen on sock_fd, new connection on new_fd
     int sockfd_udp;
     int num_bytes;
@@ -67,7 +73,7 @@ int main(int varc, char* argv[])
     struct dht dhtInstance;
     memset(&dhtInstance, 0, sizeof(struct dht));
     populate_dht_struct(&dhtInstance);
-    dhtInstance.node_id = atol(argv[3]);
+    dhtInstance.node_id = node_id;
     data.dhtInstance = &dhtInstance;
     data.dhtInstance->node_ip = calloc(1, strlen(ipaddr)+1);
     memcpy(data.dhtInstance->node_ip, ipaddr, strlen(ipaddr));

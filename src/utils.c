@@ -148,49 +148,54 @@ void request_handler(int fd, char* msgPrefix, struct data* data) {
 
         uint16_t hashed = hash(requests[i]->route);
         if (1) {
-        if ((hashed <= data->node_id && hashed > data->dhtInstance->prev_node_id)
-        || (data->dhtInstance->prev_node_id > data->node_id && (hashed > data->dhtInstance->prev_node_id || hashed <= data->dhtInstance->node_id))) { //prevnode < hashed < node_id
-            if (strncmp(requests[i]->HTTPMethode, "GET", strlen("GET")) == 0) {
-                get_handler(fd, requests[i], data->dynamicResources);
-                free_httpRequest((requests[i]));
-                continue;
-            }
-            if (strncmp(requests[i]->HTTPMethode, "PUT", strlen("PUT")) == 0) {
-                put_handler(fd, requests[i], data->dynamicResources);
-                free_httpRequest((requests[i]));
-                continue;
-            }
-            if (strncmp(requests[i]->HTTPMethode, "DELETE", strlen("DELETE")) == 0) {
-                delete_handler(fd, requests[i], data->dynamicResources);
-                free_httpRequest((requests[i]));
-                continue;
-            }
-            send(fd, STATUS_CODE_501, strlen(STATUS_CODE_501), 0);
-            free_httpRequest(requests[i]);
-        } else {
-            printf("in dht phase\r\n");
-            printf("last known hash: %d and node_id: %d\n", data->hash_records[data->oldest_record]->hash_id, data->hash_records[data->oldest_record]->node_id);
-            uint8_t hash_is_known = 0;
+            if ((hashed <= data->node_id && hashed > data->dhtInstance->prev_node_id)
+                || (data->dhtInstance->prev_node_id > data->node_id && (hashed > data->dhtInstance->prev_node_id ||
+                                                                        hashed <=
+                                                                        data->dhtInstance->node_id))) { //prevnode < hashed < node_id
+                if (strncmp(requests[i]->HTTPMethode, "GET", strlen("GET")) == 0) {
+                    get_handler(fd, requests[i], data->dynamicResources);
+                    free_httpRequest((requests[i]));
+                    continue;
+                }
+                if (strncmp(requests[i]->HTTPMethode, "PUT", strlen("PUT")) == 0) {
+                    put_handler(fd, requests[i], data->dynamicResources);
+                    free_httpRequest((requests[i]));
+                    continue;
+                }
+                if (strncmp(requests[i]->HTTPMethode, "DELETE", strlen("DELETE")) == 0) {
+                    delete_handler(fd, requests[i], data->dynamicResources);
+                    free_httpRequest((requests[i]));
+                    continue;
+                }
+                send(fd, STATUS_CODE_501, strlen(STATUS_CODE_501), 0);
+                free_httpRequest(requests[i]);
+            } else {
+                printf("in dht phase\r\n");
+                printf("last known hash: %d and node_id: %d\n", data->hash_records[data->oldest_record]->hash_id,
+                       data->hash_records[data->oldest_record]->node_id);
+                uint8_t hash_is_known = 0;
 
-            for (int j = 0; j < 10; j++) {
-                if ((hashed <= data->hash_records[j]->node_id && hashed > data->hash_records[j]->hash_id)
-                    || (data->hash_records[j]->hash_id > data->hash_records[j]->node_id && (hashed > data->hash_records[j]->hash_id || hashed <= data->hash_records[j]->node_id))) { //prevnode < hashed < node_id
-                    char reply[512];
-                    printf("shoud send 303\r\n");
-                    sprintf(reply, "HTTP/1.1 303 See Other\r\nLocation: http://%s/%s\r\nContent-Length: 0\r\n\r\n",
-                            data->hash_records[j]->host, requests[i]->route + 1);
-                    send(fd, reply, strlen(reply), 0);
-                    hash_is_known = 1;
-                    break;
+                for (int j = 0; j < 10; j++) {
+                    if ((hashed <= data->hash_records[j]->node_id && hashed > data->hash_records[j]->hash_id)
+                        || (data->hash_records[j]->hash_id > data->hash_records[j]->node_id &&
+                            (hashed > data->hash_records[j]->hash_id ||
+                             hashed <= data->hash_records[j]->node_id))) { //prevnode < hashed < node_id
+                        char reply[512];
+                        printf("shoud send 303\r\n");
+                        sprintf(reply, "HTTP/1.1 303 See Other\r\nLocation: http://%s/%s\r\nContent-Length: 0\r\n\r\n",
+                                data->hash_records[j]->host, requests[i]->route + 1);
+                        send(fd, reply, strlen(reply), 0);
+                        hash_is_known = 1;
+                        break;
+                    }
+                }
+                if (hash_is_known == 0) {
+                    send(fd, STATUS_CODE_503, strlen(STATUS_CODE_503), 0);
+                    send_lookup(data->udpfd, data->dhtInstance, hashed, data->p);
+                    printf("sent 503\n");
                 }
             }
-            if (hash_is_known == 0) {
-                send(fd, STATUS_CODE_503, strlen(STATUS_CODE_503), 0);
-                send_lookup(data->udpfd, data->dhtInstance, hashed, data->p);
-                printf("sent 503\n");
-            }
         }
-
     }
     free(requests);
 //        return;
@@ -596,8 +601,9 @@ void populate_hash_records(struct data* data) {
 //    sprintf(hashR1->host, "%s:%d", data->dhtInstance->prev_ip, data->dhtInstance->prev_port);
 
     struct hash_record* hashR2= data->hash_records[1];
-    hashR2->node_id = data->dhtInstance->succ_id;
-    sprintf(hashR2->host, "%s:%d", data->dhtInstance->succ_ip, data->dhtInstance->succ_port);
-
-    data->oldest_record += 2;
+    if (data->dhtInstance->succ_ip != NULL) {
+        hashR2->node_id = data->dhtInstance->succ_id;
+        sprintf(hashR2->host, "%s:%d", data->dhtInstance->succ_ip, data->dhtInstance->succ_port);
+    }
+    data->oldest_record += 1;
 }
