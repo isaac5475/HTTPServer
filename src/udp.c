@@ -85,3 +85,27 @@ void udp_handler(uint8_t* buff, int fd, struct sockaddr* ipaddr, socklen_t addr_
         printf("added hash: %d\n", data->hash_records[i]->hash_id);
     }
 }
+
+void create_msg(uint8_t* packet, uint8_t msg_type, uint16_t hash_id, uint16_t node_id, struct in_addr* node_ip, uint16_t node_port) {
+    packet[0] = msg_type;
+    int offset = 1;
+    uint16_t hashN = htons(hash_id);
+    memcpy(packet + offset, &hashN, sizeof(uint16_t));
+    offset += sizeof(uint16_t);
+
+    uint16_t node_idN = htons(node_id);
+    memcpy(packet + offset, &node_idN, sizeof(uint16_t));
+    offset += sizeof(uint16_t);
+    memcpy(packet + offset, &node_ip->s_addr, 4);
+    offset += 4;
+
+    uint16_t node_port_n = htons(node_port);
+    memcpy(packet + offset, &node_port_n, sizeof(uint16_t));
+
+}
+
+void send_msg(int fd, uint8_t* msg, struct sockaddr_in* node_addr) {
+    int d = sendto(fd, msg, 11, 0, (struct sockaddr*)node_addr, sizeof(*node_addr));
+    printf("%d\n", d);
+}
+

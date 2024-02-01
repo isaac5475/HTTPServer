@@ -191,8 +191,20 @@ void request_handler(int fd, char* msgPrefix, struct data* data) {
                 }
                 if (hash_is_known == 0) {
                     send(fd, STATUS_CODE_503, strlen(STATUS_CODE_503), 0);
-                    send_lookup(data->udpfd, data->dhtInstance, hashed, data->p);
-                    printf("sent 503\n");
+                    uint8_t lookup_packet[11];
+                    struct in_addr current_node_addr;
+                    if (inet_pton(AF_INET, data->dhtInstance->node_ip, &current_node_addr) <= 0) {
+                        perror("inet_pton");
+                    }
+                    create_msg(lookup_packet, LOOKUP_MODE, hashed, data->dhtInstance->node_id, &current_node_addr, data->dhtInstance->node_port);
+
+                    struct sockaddr_in addr_to_send;
+                    memset(&addr_to_send, 0, sizeof(addr_to_send));
+
+                    addr_to_send.sin_family = AF_INET;
+                    addr_to_send.sin_port = htons(data->dhtInstance->succ_port);
+                    inet_pton(AF_INET, data->dhtInstance->succ_ip, &addr_to_send.sin_addr);
+                    send_msg(data->udpfd, lookup_packet, &addr_to_send);
                 }
             }
         }
