@@ -11,7 +11,12 @@
 const int SHM_SIZE = 1024;
 
 
-
+pid_t child_pid;
+void sigterm_handler(int signum) {
+    // Handle termination signal
+    printf("Child process received termination signal. Exiting.\n");
+    exit(EXIT_SUCCESS);
+}
 void sigchld_handler(int s)
 {
     // waitpid() might overwrite errno, so we save and restore it:
@@ -122,6 +127,7 @@ int main(int varc, char* argv[])
         uint8_t packet[11];
 
         struct in_addr node__addr;
+        memset(data.dhtInstance->node_ip, 0, sizeof(*data.dhtInstance->node_ip));
         if (inet_pton(AF_INET, data.dhtInstance->node_ip, &node__addr) <= 0) {
             perror("inet_pton");
         }
@@ -138,15 +144,19 @@ int main(int varc, char* argv[])
         printf("send packet to %s:%d\n", anchor_ip, anchor_port);
     }
 
-    pid_t child_pid = fork(); //child process sends stabilize messages every 1s
+//    setpgid(0, 0);
+     child_pid = fork(); //child process sends stabilize messages every 1s
     if (child_pid == -1) {
         perror("fork");
     } else if (child_pid == 0) {
+        signal(SIGTERM, sigterm_handler);  // Install signal handler
+        printf("child process with PID: %d\n", getpid());
        while(1) {
-           send_stabilize_msg(data.udpfd, &data);
            sleep(1);
+           send_stabilize_msg(data.udpfd, &data);
        }
     } else { //parent process
+        printf("parent process with PID: %d\n", getpid());
         while (1) {  // main loop
             read_fds = master;
             if (select(fdmax+1, &read_fds, NULL, NULL, NULL) == -1) {
@@ -202,6 +212,5 @@ int main(int varc, char* argv[])
             }
         }
     }
-
 }
 
