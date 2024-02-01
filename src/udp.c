@@ -60,6 +60,32 @@ void udp_handler(uint8_t* buff, int fd, struct sockaddr* ipaddr, socklen_t addr_
         data->hash_records[i]->node_id = node_id_received;
         sprintf(data->hash_records[i]->host, "%s:%d", node_ip_received_str, node_port_received);
 
+    } else if (msg_type_received == STABILIZE_MODE) {
+            uint8_t reply_packet[11];
+            uint16_t hash_id = 0;
+            uint16_t node_id = data->dhtInstance->prev_node_id;
+
+            struct in_addr node_ip;
+            if (inet_pton(AF_INET, data->dhtInstance->prev_ip, &node_ip) <= 0) {
+                perror("inet_pton");
+            }
+            uint16_t node_port = data->dhtInstance->prev_port;
+            create_msg(reply_packet, NOTIFY_MODE, hash_id, node_id, &node_ip, node_port);
+            struct sockaddr_in addr_to_send;
+            memset(&addr_to_send, 0, sizeof(addr_to_send));
+            addr_to_send.sin_family = AF_INET;
+            addr_to_send.sin_port = htons(node_port_received);
+            addr_to_send.sin_addr = node_ip_received;
+
+            send_msg(fd, reply_packet, &addr_to_send);
+
+    } else if (msg_type_received == NOTIFY_MODE) {
+        if (node_id_received != data->dhtInstance->node_id) {//New node has entered DHT, which is successor of current node
+            data->dhtInstance->node_id = node_id_received;
+            memset(data->dhtInstance->node_ip, 0, sizeof(*data->dhtInstance->node_ip));
+            memcpy(data->dhtInstance->node_ip, node_ip_received_str, sizeof(node_ip_received));
+            data->dhtInstance->node_port = node_port_received;
+        }
     } else if (msg_type_received == JOIN_MODE) {
         if (node_is_responsible(data, node_id_received)) {
             uint8_t reply_packet[11];
@@ -89,26 +115,6 @@ void udp_handler(uint8_t* buff, int fd, struct sockaddr* ipaddr, socklen_t addr_
         }
     }
 
-    else if (msg_type_received == STABILIZE_MODE) {
-        uint8_t reply_packet[11];
-        uint16_t hash_id = 0;
-        uint16_t node_id = data->dhtInstance->prev_node_id;
-
-        struct in_addr node_ip;
-        if (inet_pton(AF_INET, data->dhtInstance->prev_ip, &node_ip) <= 0) {
-            perror("inet_pton");
-        }
-        uint16_t node_port = data->dhtInstance->prev_port;
-        create_msg(reply_packet, NOTIFY_MODE, hash_id, node_id, &node_ip, node_port);
-        struct sockaddr_in addr_to_send;
-        memset(&addr_to_send, 0, sizeof(addr_to_send));
-        addr_to_send.sin_family = AF_INET;
-        addr_to_send.sin_port = htons(node_port_received);
-        addr_to_send.sin_addr = node_ip_received;
-
-        send_msg(fd, reply_packet, &addr_to_send);
-
-    }
 }
 
 void forward_packet(const uint8_t *buff, int fd, const struct dht *dht) {
