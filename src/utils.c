@@ -569,44 +569,6 @@ int populate_dht_struct(struct dht* dht) {
     return 0;
 }
 
-int send_lookup(int fd, struct dht* dht, uint16_t hash, struct addrinfo* p) {
-
-    // Access the binary form of the IP address
-    uint8_t buf[11];
-    int offset = 0;
-    buf[0] = 0; //code of lookup
-    offset++;
-
-    uint16_t hashN = htons(hash);
-    memcpy(buf + offset, &hashN, sizeof(uint16_t)); //hash of resource
-    offset += sizeof(uint16_t);
-
-    uint16_t node_idN = htons(dht->node_id);
-    memcpy(buf + offset, &node_idN, sizeof(uint16_t)); //succ_node_id
-    offset += sizeof(uint16_t);
-
-    struct in_addr node__addr;
-    if (inet_pton(AF_INET, dht->node_ip, &node__addr) <= 0) {
-        perror("inet_pton");
-    }
-    memcpy(buf + offset, &node__addr.s_addr, 4);
-    offset += 4;
-
-    uint16_t succ_portN = htons(dht->node_port);
-    memcpy(buf + offset, &succ_portN, sizeof(uint16_t));
-
-    struct sockaddr_in node_addr;
-    memset(&node_addr, 0, sizeof(node_addr));
-
-    node_addr.sin_family = AF_INET;
-    node_addr.sin_port = htons(dht->succ_port);
-    inet_pton(AF_INET, dht->succ_ip, &node_addr.sin_addr);
-
-    int bytes_sent = sendto(fd, buf, sizeof(buf), 0, (struct sockaddr*)&node_addr, sizeof(node_addr));
-    printf("lookup sent %d bytes, to %s:%d\n", bytes_sent, dht->succ_ip, dht->succ_port);
-    return bytes_sent;
-}
-
 void populate_hash_records(struct data* data) {
 //    struct hash_record* hashR1= data->hash_records[0];
 //    hashR1->node_id = data->dhtInstance->prev_node_id;
@@ -619,3 +581,5 @@ void populate_hash_records(struct data* data) {
     }
     data->oldest_record += 1;
 }
+
+
