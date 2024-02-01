@@ -79,6 +79,7 @@ int main(int varc, char* argv[])
     memcpy(data.dhtInstance->node_ip, ipaddr, strlen(ipaddr));
     data.dhtInstance->node_port = atol(port);
 
+
     start_server_tcp(ipaddr, port, &sockfd_tcp);
     data.p = start_server_udp(ipaddr, port, &sockfd_udp);
     data.udpfd = sockfd_udp;
@@ -113,6 +114,29 @@ int main(int varc, char* argv[])
     }
     char msgPrefix[REQUEST_LEN];
     memset(msgPrefix, 0, REQUEST_LEN);
+
+    if (varc == 6) {
+        char* anchor_ip = argv[4];
+        uint16_t anchor_port = atol(argv[5]);
+
+        uint8_t packet[11];
+
+        struct in_addr node__addr;
+        if (inet_pton(AF_INET, data.dhtInstance->node_ip, &node__addr) <= 0) {
+            perror("inet_pton");
+        }
+        create_msg(packet, JOIN_MODE, 0, data.dhtInstance->node_id, &node__addr, data.dhtInstance->node_port);
+        struct sockaddr_in anchor_addr;
+        memset(&anchor_addr, 0, sizeof(anchor_addr));
+
+        anchor_addr.sin_family = AF_INET;
+        anchor_addr.sin_port = htons(anchor_port);
+        if (inet_pton(AF_INET, anchor_ip, &anchor_addr.sin_addr) <= 0) {
+            perror("inet_pton");
+        }
+        send_msg(data.udpfd, packet, &anchor_addr);
+        printf("send packet to %s:%d\n", anchor_ip, anchor_port);
+    }
 
         while (1) {  // main loop
             read_fds = master;
