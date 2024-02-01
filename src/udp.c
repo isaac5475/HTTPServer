@@ -131,3 +131,23 @@ uint8_t successor_is_responsible(const struct data *data, uint16_t id) {
         return 0;
     }
 }
+
+void send_stabilize_msg(int fd, const struct data *data) {
+    uint8_t stabilize_packet[11];
+    uint16_t hash_id = data->dhtInstance->node_id;
+    uint16_t node_id = data->dhtInstance->node_id;
+
+    struct in_addr node_ip;
+    if (inet_pton(AF_INET, data->dhtInstance->node_ip, &node_ip) <= 0) {
+        perror("inet_pton");
+    }
+    uint16_t node_port = data->dhtInstance->node_port;
+    create_msg(stabilize_packet, STABILIZE_MODE, hash_id, node_id, &node_ip, node_port);
+    struct sockaddr_in addr_to_send;
+    memset(&addr_to_send, 0, sizeof(addr_to_send));
+    addr_to_send.sin_family = AF_INET;
+    addr_to_send.sin_port = htons(data->dhtInstance->succ_port);
+    inet_pton(AF_INET, data->dhtInstance->succ_ip, &addr_to_send.sin_addr);
+
+    send_msg(fd, stabilize_packet, &addr_to_send);
+}

@@ -138,6 +138,15 @@ int main(int varc, char* argv[])
         printf("send packet to %s:%d\n", anchor_ip, anchor_port);
     }
 
+    pid_t child_pid = fork(); //child process sends stabilize messages every 1s
+    if (child_pid == -1) {
+        perror("fork");
+    } else if (child_pid == 0) {
+       while(1) {
+           send_stabilize_msg(data.udpfd, &data);
+           sleep(1);
+       }
+    } else { //parent process
         while (1) {  // main loop
             read_fds = master;
             if (select(fdmax+1, &read_fds, NULL, NULL, NULL) == -1) {
@@ -185,15 +194,14 @@ int main(int varc, char* argv[])
                         }
                     }
                     else {
-                    // handle tcp connection
+                        // handle tcp connection
                         printf("handling connection with TCP socket %d\n", i);
                         request_handler(i, msgPrefix, &data);
                     }
                 }
             }
-
-            //tcp handler
-
         }
+    }
+
 }
 
