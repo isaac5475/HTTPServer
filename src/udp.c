@@ -52,6 +52,7 @@ void udp_handler(uint8_t* buff, int fd, struct sockaddr* ipaddr, socklen_t addr_
         } else {
             forward_packet(buff, fd, dht);    //current node isn't responsible for resource, pass forward
         }
+
     } else if (msg_type_received == REPLY_MODE) {
         uint8_t i = data->oldest_record;
         data->oldest_record = (data->oldest_record + 1) % 10;
@@ -86,6 +87,27 @@ void udp_handler(uint8_t* buff, int fd, struct sockaddr* ipaddr, socklen_t addr_
         } else {
             forward_packet(buff, fd, dht);
         }
+    }
+
+    else if (msg_type_received == STABILIZE_MODE) {
+        uint8_t reply_packet[11];
+        uint16_t hash_id = 0;
+        uint16_t node_id = data->dhtInstance->prev_node_id;
+
+        struct in_addr node_ip;
+        if (inet_pton(AF_INET, data->dhtInstance->prev_ip, &node_ip) <= 0) {
+            perror("inet_pton");
+        }
+        uint16_t node_port = data->dhtInstance->prev_port;
+        create_msg(reply_packet, NOTIFY_MODE, hash_id, node_id, &node_ip, node_port);
+        struct sockaddr_in addr_to_send;
+        memset(&addr_to_send, 0, sizeof(addr_to_send));
+        addr_to_send.sin_family = AF_INET;
+        addr_to_send.sin_port = htons(node_port_received);
+        addr_to_send.sin_addr = node_ip_received;
+
+        send_msg(fd, reply_packet, &addr_to_send);
+
     }
 }
 
