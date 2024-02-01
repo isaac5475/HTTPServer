@@ -110,4 +110,5 @@ uint16_t hash(const char* str);
 int get_prev_node_id();
 int populate_dht_struct(struct dht* dht);
 void populate_hash_records(struct data* data);
+uint8_t node_is_responsible(const struct data *data, uint16_t id);
 #endif //RN_PRAXIS_UTILS_H

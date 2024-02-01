@@ -148,10 +148,7 @@ void request_handler(int fd, char* msgPrefix, struct data* data) {
 
         uint16_t hashed = hash(requests[i]->route);
         if (1) {
-            if ((hashed <= data->node_id && hashed > data->dhtInstance->prev_node_id)
-                || (data->dhtInstance->prev_node_id > data->node_id && (hashed > data->dhtInstance->prev_node_id ||
-                                                                        hashed <=
-                                                                        data->dhtInstance->node_id))) { //prevnode < hashed < node_id
+            if (node_is_responsible(data, hashed) == 1) { //prevnode < hashed < node_id
                 if (strncmp(requests[i]->HTTPMethode, "GET", strlen("GET")) == 0) {
                     get_handler(fd, requests[i], data->dynamicResources);
                     free_httpRequest((requests[i]));
@@ -211,6 +208,17 @@ void request_handler(int fd, char* msgPrefix, struct data* data) {
     }
     free(requests);
 //        return;
+}
+
+uint8_t node_is_responsible(const struct data *data, uint16_t id) {
+    if ((id <= data->node_id && id > data->dhtInstance->prev_node_id)
+               || (data->dhtInstance->prev_node_id > data->node_id && (id > data->dhtInstance->prev_node_id ||
+                                                                            id <=
+                                                                            data->dhtInstance->node_id))) {
+        return 1;
+    } else {
+        return 0;
+    }
 }
 
 void put_handler(int fd, struct httpRequest *req, struct dynamicResource* dynamicResources[MAX_RESOURCES_AMOUNT]) {
