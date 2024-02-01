@@ -22,6 +22,8 @@
 #include "sys/shm.h"
 #include <time.h>
 #include <openssl/sha.h>
+#include "udp.h"
+
 
 #define REQUEST_LEN 8192
 #define MAX_HEADERS_AMOUNT 40
@@ -107,6 +109,5 @@ void free_dynamic_records(struct dynamicResource* dynamicResources[MAX_RESOURCES
 uint16_t hash(const char* str);
 int get_prev_node_id();
 int populate_dht_struct(struct dht* dht);
-int send_lookup(int fd, struct dht* dht, uint16_t hash, struct addrinfo *p);
 void populate_hash_records(struct data* data);
 #endif //RN_PRAXIS_UTILS_H
