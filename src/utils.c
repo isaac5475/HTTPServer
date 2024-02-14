@@ -5,7 +5,7 @@
 #include <fcntl.h>
 #include "utils.h"
 
-int start_server_tcp(char* ipaddr, char* port, int* sockfd) {
+int start_server_tcp(char *ipaddr, char *port, int *sockfd) {
     struct addrinfo hints, *servinfo, *p;
     int yes = 1;
     memset(&hints, 0, sizeof hints);
@@ -20,51 +20,7 @@ int start_server_tcp(char* ipaddr, char* port, int* sockfd) {
     }
 
     // loop through all the results and bind to the first we can
-    for(p = servinfo; p != NULL; p = p->ai_next) {
-        if ((*sockfd = socket(p->ai_family, p->ai_socktype,
-                             p->ai_protocol)) == -1) {
-            perror("server: socket");
-            continue;
-        }
-        fcntl(*sockfd, F_SETFL, O_NONBLOCK);
-        if (setsockopt(*sockfd, SOL_SOCKET, SO_REUSEADDR, &yes,
-                       sizeof(int)) == -1) {
-            perror("setsockopt");
-            exit(1);
-        }
-        if (bind(*sockfd, p->ai_addr, p->ai_addrlen) == -1) {
-            close(*sockfd);
-            perror("server: bind");
-            continue;
-        }
-
-        break;
-    }
-
-    freeaddrinfo(servinfo); // all done with this structure
-
-    if (p == NULL)  {
-        fprintf(stderr, "server: failed to bind\n");
-        exit(1);
-    }
-}
-
-struct addrinfo* start_server_udp(char* ipaddr, char* port, int* sockfd) {
-    struct addrinfo hints, *servinfo, *p;
-    int yes = 1;
-    memset(&hints, 0, sizeof hints);
-    hints.ai_family = AF_UNSPEC;
-    hints.ai_socktype = SOCK_DGRAM;
-    hints.ai_flags = AI_PASSIVE; // use my IP
-    int rv;
-
-    if ((rv = getaddrinfo(ipaddr, port, &hints, &servinfo)) != 0) {
-        fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
-        return NULL;
-    }
-
-    // loop through all the results and bind to the first we can
-    for(p = servinfo; p != NULL; p = p->ai_next) {
+    for (p = servinfo; p != NULL; p = p->ai_next) {
         if ((*sockfd = socket(p->ai_family, p->ai_socktype,
                               p->ai_protocol)) == -1) {
             perror("server: socket");
@@ -87,7 +43,51 @@ struct addrinfo* start_server_udp(char* ipaddr, char* port, int* sockfd) {
 
     freeaddrinfo(servinfo); // all done with this structure
 
-    if (p == NULL)  {
+    if (p == NULL) {
+        fprintf(stderr, "server: failed to bind\n");
+        exit(1);
+    }
+}
+
+struct addrinfo *start_server_udp(char *ipaddr, char *port, int *sockfd) {
+    struct addrinfo hints, *servinfo, *p;
+    int yes = 1;
+    memset(&hints, 0, sizeof hints);
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_DGRAM;
+    hints.ai_flags = AI_PASSIVE; // use my IP
+    int rv;
+
+    if ((rv = getaddrinfo(ipaddr, port, &hints, &servinfo)) != 0) {
+        fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
+        return NULL;
+    }
+
+    // loop through all the results and bind to the first we can
+    for (p = servinfo; p != NULL; p = p->ai_next) {
+        if ((*sockfd = socket(p->ai_family, p->ai_socktype,
+                              p->ai_protocol)) == -1) {
+            perror("server: socket");
+            continue;
+        }
+        fcntl(*sockfd, F_SETFL, O_NONBLOCK);
+        if (setsockopt(*sockfd, SOL_SOCKET, SO_REUSEADDR, &yes,
+                       sizeof(int)) == -1) {
+            perror("setsockopt");
+            exit(1);
+        }
+        if (bind(*sockfd, p->ai_addr, p->ai_addrlen) == -1) {
+            close(*sockfd);
+            perror("server: bind");
+            continue;
+        }
+
+        break;
+    }
+
+    freeaddrinfo(servinfo); // all done with this structure
+
+    if (p == NULL) {
         fprintf(stderr, "server: failed to bind\n");
         exit(1);
     }
@@ -95,104 +95,130 @@ struct addrinfo* start_server_udp(char* ipaddr, char* port, int* sockfd) {
 }
 
 
-void request_handler(int fd, char* msgPrefix, struct data* data) {
-    while (1) { //Connection remains open until closed client-side
-        char msgBuf[REQUEST_LEN];
-        memset(msgBuf, 0, REQUEST_LEN);
-        int recvRes = recv(fd, msgBuf, REQUEST_LEN, 0);
-        if (recvRes == -1) {
-            continue;
-        }
-        if (recvRes == 0) {
-            printf("connection reset\r\n");
-            return;
-        }
-        char* newMsg = calloc(REQUEST_LEN, 1);
-        if (strlen(msgPrefix) != 0) {
-            strncat(newMsg, msgPrefix, strlen(msgPrefix));
-            memset(msgPrefix, 0, REQUEST_LEN);
-            strncat(newMsg, msgBuf, strlen(msgBuf));
-        } else {
-            strncpy(newMsg, msgBuf, strlen(msgBuf));
-        }
-        int position = 0;
-        struct httpRequest** requests = calloc(10, sizeof(struct httpRequest*));
-        int parse_res = parse_requests(newMsg, requests, &position);
-        if (position != strlen(newMsg)) { //if we couldn't parse the end of the incoming message, save it till next time
-            size_t remainingLength = strlen(newMsg) - position;
-            strncpy(msgPrefix, newMsg + position, remainingLength);
-            msgPrefix[remainingLength] = '\0';
-        } else if (requests[parse_res-1]->status == -2) {
-            strncpy(msgPrefix, newMsg, strlen(newMsg));
-        }
-        free(newMsg);
+void request_handler(int fd, char *msgPrefix, struct data *data) {
+    char msgBuf[REQUEST_LEN];
+    memset(msgBuf, 0, REQUEST_LEN);
+    int recvRes = recv(fd, msgBuf, REQUEST_LEN, 0);
+    if (recvRes == 0) {
+        printf("selectserver: socket %d hung up\n", fd);
+        close(fd);
+        FD_CLR(fd, data->fdset);
+        return;
+    }
+    char *newMsg = calloc(REQUEST_LEN, 1);
+    if (newMsg == NULL) {
+        perror("calloc");
+        exit(1);
+    }
+
+    if (strlen(msgPrefix) != 0) {
+        strncat(newMsg, msgPrefix, strlen(msgPrefix));
+        memset(msgPrefix, 0, REQUEST_LEN);
+        strncat(newMsg, msgBuf, strlen(msgBuf));
+    } else {
+        strncpy(newMsg, msgBuf, strlen(msgBuf) + 1);
+    }
+    int position = 0;
+    printf("TCP message: %s\n", newMsg);
+    struct httpRequest **requests = calloc(10, sizeof(struct httpRequest *));
+    int parse_res = parse_requests(newMsg, requests, &position);
+    if (position != strlen(newMsg)) { //if we couldn't parse the end of the incoming message, save it till next time
+        size_t remainingLength = strlen(newMsg) - position;
+        strncpy(msgPrefix, newMsg + position, remainingLength);
+        msgPrefix[remainingLength] = '\0';
+    } else if (requests[parse_res - 1]->status == -2) {
+        strncpy(msgPrefix, newMsg, strlen(newMsg));
+    }
+    free(newMsg);
 //        printf("-----------------------\r\n");
-        if (parse_res == 0) {
+    if (parse_res == 0) {
+        return;
+    }
+    for (int i = 0; i < parse_res; i++) {
+
+        if (requests[i]->status == -1) {
+            send(fd, STATUS_CODE_400, strlen(STATUS_CODE_400), 0);
+            free_httpRequest((requests[i]));
             continue;
         }
-        for (int i = 0; i < parse_res; i++) {
-
-            if (requests[i]->status == -1) {
-                send(fd, STATUS_CODE_400, strlen(STATUS_CODE_400), 0);
-                free_httpRequest((requests[i]));
-                continue;
-            }
-            if (requests[i]->status == -2) {
-                free_httpRequest((requests[i]));
-                continue;
-            }
-
-            uint16_t hashed = hash(requests[i]->route);
-            if ((hashed <= data->node_id && hashed > data->dhtInstance->prev_node_id)
-            || (data->dhtInstance->prev_node_id > data->node_id && (hashed > data->dhtInstance->prev_node_id || hashed <= data->dhtInstance->node_id))) { //prevnode < hashed < node_id
-                if (strncmp(requests[i]->HTTPMethode, "GET", strlen("GET")) == 0) {
-                    get_handler(fd, requests[i], data->dynamicResources);
-                    free_httpRequest((requests[i]));
-                    continue;
-                }
-                if (strncmp(requests[i]->HTTPMethode, "PUT", strlen("PUT")) == 0) {
-                    put_handler(fd, requests[i], data->dynamicResources);
-                    free_httpRequest((requests[i]));
-                    continue;
-                }
-                if (strncmp(requests[i]->HTTPMethode, "DELETE", strlen("DELETE")) == 0) {
-                    delete_handler(fd, requests[i], data->dynamicResources);
-                    free_httpRequest((requests[i]));
-                    continue;
-                }
-                send(fd, STATUS_CODE_501, strlen(STATUS_CODE_501), 0);
-                free_httpRequest(requests[i]);
-            } else {
-                printf("in dht phase\r\n");
-                printf("last known hash: %d and node_id: %d\n", data->hash_records[data->oldest_record]->hash_id, data->hash_records[data->oldest_record]->node_id);
-                uint8_t hash_is_known = 0;
-
-                for (int j = 0; j < 10; j++) {
-                    if ((hashed <= data->hash_records[j]->node_id && hashed > data->hash_records[j]->hash_id)
-                        || (data->hash_records[j]->hash_id > data->hash_records[j]->node_id && (hashed > data->hash_records[j]->hash_id || hashed <= data->hash_records[j]->node_id))) { //prevnode < hashed < node_id
-                        char reply[512];
-                        printf("shoud send 303\r\n");
-                        sprintf(reply, "HTTP/1.1 303 See Other\r\nLocation: http://%s/%s\r\nContent-Length: 0\r\n\r\n",
-                                data->hash_records[j]->host, requests[i]->route);
-                        send(fd, reply, strlen(reply), 0);
-                        hash_is_known = 1;
-                        break;
-                    }
-                }
-                if (hash_is_known == 0) {
-                    send(fd, STATUS_CODE_503, strlen(STATUS_CODE_503), 0);
-                    send_lookup(data->udpfd, data->dhtInstance, hashed, data->p);
-                    printf("sent 503\n");
-                }
-            }
-
+        if (requests[i]->status == -2) {
+            free_httpRequest((requests[i]));
+            continue;
         }
-        free(requests);
+
+        uint16_t hashed = hash(requests[i]->route);
+        if (node_is_responsible(data, hashed) == 1) { //prevnode < hashed < node_id
+            if (strncmp(requests[i]->HTTPMethode, "GET", strlen("GET")) == 0) {
+                get_handler(fd, requests[i], data->dynamicResources);
+                free_httpRequest((requests[i]));
+                continue;
+            }
+            if (strncmp(requests[i]->HTTPMethode, "PUT", strlen("PUT")) == 0) {
+                put_handler(fd, requests[i], data->dynamicResources);
+                free_httpRequest((requests[i]));
+                continue;
+            }
+            if (strncmp(requests[i]->HTTPMethode, "DELETE", strlen("DELETE")) == 0) {
+                delete_handler(fd, requests[i], data->dynamicResources);
+                free_httpRequest((requests[i]));
+                continue;
+            }
+            send(fd, STATUS_CODE_501, strlen(STATUS_CODE_501), 0);
+            free_httpRequest(requests[i]);
+        } else {
+            uint8_t hash_is_known = 0;
+            for (int j = 0; j < 10; j++) {
+                if ((hashed <= data->hash_records[j]->node_id && hashed > data->hash_records[j]->hash_id)
+                    || (data->hash_records[j]->hash_id > data->hash_records[j]->node_id &&
+                        (hashed > data->hash_records[j]->hash_id ||
+                         hashed <= data->hash_records[j]->node_id))) { //prevnode < hashed < node_id
+                    char reply[512];
+                    sprintf(reply, "HTTP/1.1 303 See Other\r\nLocation: http://%s/%s\r\nContent-Length: 0\r\n\r\n",
+                            data->hash_records[j]->host, requests[i]->route + 1);
+                    send(fd, reply, strlen(reply), 0);
+                    hash_is_known = 1;
+                    break;
+                }
+            }
+//                if (hash_is_known == 0 && strlen(data->dhtInstance->succ_ip) == 0) {
+//                    send(fd, STATUS_CODE_404_CL, strlen(STATUS_CODE_400_CL), 0);
+//                } else if (hash_is_known == 0) {
+            if (hash_is_known == 0) {
+                send(fd, STATUS_CODE_503, strlen(STATUS_CODE_503), 0);
+                uint8_t lookup_packet[11];
+                struct in_addr current_node_addr;
+                if (inet_pton(AF_INET, data->dhtInstance->node_ip, &current_node_addr) <= 0) {
+                    perror("inet_pton");
+                }
+                create_msg(lookup_packet, LOOKUP_MODE, hashed, data->dhtInstance->node_id, &current_node_addr,
+                           data->dhtInstance->node_port);
+
+                struct sockaddr_in addr_to_send;
+                memset(&addr_to_send, 0, sizeof(addr_to_send));
+
+                addr_to_send.sin_family = AF_INET;
+                addr_to_send.sin_port = htons(data->dhtInstance->succ_port);
+                inet_pton(AF_INET, data->dhtInstance->succ_ip, &addr_to_send.sin_addr);
+                send_msg(data->sockfd_udp, lookup_packet, &addr_to_send);
+            }
+        }
+    }
 //        return;
+}
+
+uint8_t node_is_responsible(const struct data *data, uint16_t id) {
+    if (data->dhtInstance->node_id == data->dhtInstance->prev_node_id && data->dhtInstance->prev_node_id == data->dhtInstance->succ_id) return 1; //single node in DHT -> shouldn't redirect
+    if ((id <= data->dhtInstance->node_id && id > data->dhtInstance->prev_node_id)
+        || (data->dhtInstance->prev_node_id > data->dhtInstance->node_id && (id > data->dhtInstance->prev_node_id ||
+                                                                             id <=
+                                                                             data->dhtInstance->node_id))) {
+        return 1;
+    } else {
+        return 0;
     }
 }
 
-void put_handler(int fd, struct httpRequest *req, struct dynamicResource* dynamicResources[MAX_RESOURCES_AMOUNT]) {
+void put_handler(int fd, struct httpRequest *req, struct dynamicResource *dynamicResources[MAX_RESOURCES_AMOUNT]) {
 //    send(fd, STATUS_CODE_404, strlen(STATUS_CODE_404), 0);
 //    return;
     printf("start put_handler\n");
@@ -208,16 +234,17 @@ void put_handler(int fd, struct httpRequest *req, struct dynamicResource* dynami
         }
     }
     if (req->payload == NULL) {
-    send(fd, STATUS_CODE_403, strlen(STATUS_CODE_403), 0);
-    return;}
-    if (content_len_val == -1 || req->payload == NULL ) { //wasn't found
+        send(fd, STATUS_CODE_403, strlen(STATUS_CODE_403), 0);
+        return;
+    }
+    if (content_len_val == -1 || req->payload == NULL) { //wasn't found
         send(fd, STATUS_CODE_400_CL, strlen(STATUS_CODE_400_CL), 0);
         return;
     }
     if (strncmp(req->route, DYNAMIC_ROUTE, strlen(DYNAMIC_ROUTE)) == 0) {
         int res = add_dynamic_record(req->route, req->payload, dynamicResources);
         if (res == 0) {//success
-            send(fd,STATUS_CODE_201, strlen(STATUS_CODE_201), 0);
+            send(fd, STATUS_CODE_201, strlen(STATUS_CODE_201), 0);
         } else {    //overriden
             send(fd, STATUS_CODE_204, strlen(STATUS_CODE_204), 0);
         }
@@ -226,7 +253,7 @@ void put_handler(int fd, struct httpRequest *req, struct dynamicResource* dynami
     }
 }
 
-void delete_handler(int fd, struct httpRequest *req, struct dynamicResource* dynamicResources[MAX_RESOURCES_AMOUNT]) {
+void delete_handler(int fd, struct httpRequest *req, struct dynamicResource *dynamicResources[MAX_RESOURCES_AMOUNT]) {
     if (strncmp(req->route, DYNAMIC_ROUTE, strlen(DYNAMIC_ROUTE)) == 0) {
         int res = delete_dynamic_record(req->route, dynamicResources);
         if (res == -1) {
@@ -240,36 +267,36 @@ void delete_handler(int fd, struct httpRequest *req, struct dynamicResource* dyn
 }
 
 
-
-void get_handler(int fd, struct httpRequest *req, struct dynamicResource* dynamicResources[MAX_RESOURCES_AMOUNT]) {
+void get_handler(int fd, struct httpRequest *req, struct dynamicResource *dynamicResources[MAX_RESOURCES_AMOUNT]) {
     const char foo_url[] = "/static/foo";
     const char bar_url[] = "/static/bar";
     const char baz_url[] = "/static/baz";
     if (strncmp(req->route, foo_url, strlen(foo_url)) == 0) {
-        char* resp = "HTTP/1.1 200 OK\r\nContent-Length: 3\r\n\r\nFoo";
+        char *resp = "HTTP/1.1 200 OK\r\nContent-Length: 3\r\n\r\nFoo";
         send(fd, resp, strlen(resp), 0);
     } else if (strncmp(req->route, bar_url, strlen(bar_url)) == 0) {
-        char* resp = "HTTP/1.1 200 OK\r\nContent-Length: 3\r\n\r\nBar";
+        char *resp = "HTTP/1.1 200 OK\r\nContent-Length: 3\r\n\r\nBar";
         send(fd, resp, strlen(resp), 0);
     } else if (strncmp(req->route, baz_url, strlen(baz_url)) == 0) {
         char *resp = "HTTP/1.1 200 OK\r\nContent-Length: 3\r\n\r\nBaz";
         send(fd, resp, strlen(resp), 0);
 
     } else if (strncmp(req->route, DYNAMIC_ROUTE, strlen(DYNAMIC_ROUTE)) == 0) {
-        char* payload = read_dynamic_record(req->route, dynamicResources);
-      char resp[REQUEST_LEN];
-      if (payload == NULL) {
-          send(fd,STATUS_CODE_404_CL, strlen(STATUS_CODE_404_CL), 0);
-          return;
-      }
-        sprintf(resp, "HTTP/1.1 200 OK\r\nContent-Length: %d\r\n\r\n%s", (int)strlen(payload), payload);
+        char *payload = read_dynamic_record(req->route, dynamicResources);
+        char resp[REQUEST_LEN];
+        if (payload == NULL) {
+            send(fd, STATUS_CODE_404_CL, strlen(STATUS_CODE_404_CL), 0);
+            return;
+        }
+        sprintf(resp, "HTTP/1.1 200 OK\r\nContent-Length: %d\r\n\r\n%s", (int) strlen(payload), payload);
         send(fd, resp, strlen(resp), 0);
     } else {
         send(fd, STATUS_CODE_404, strlen(STATUS_CODE_404), 0);
     }
 }
 
-char* read_dynamic_record(char* requestedRoute, struct dynamicResource* dynamicResources[MAX_RESOURCES_AMOUNT]) {//NULL on failure, char* to value otherwise
+char *read_dynamic_record(char *requestedRoute,
+                          struct dynamicResource *dynamicResources[MAX_RESOURCES_AMOUNT]) {//NULL on failure, char* to value otherwise
     for (int i = 0; i < MAX_RESOURCES_AMOUNT && dynamicResources[i] != NULL; i++) {
         if (strncmp(dynamicResources[i]->key, requestedRoute, strlen(requestedRoute)) == 0) {
             return dynamicResources[i]->value;
@@ -278,9 +305,10 @@ char* read_dynamic_record(char* requestedRoute, struct dynamicResource* dynamicR
     return NULL;
 }
 
-int add_dynamic_record(char* requestedRoute, char* payload, struct dynamicResource* dynamicResources[MAX_RESOURCES_AMOUNT]) {// 0 on success, -1 if not
+int add_dynamic_record(char *requestedRoute, char *payload,
+                       struct dynamicResource *dynamicResources[MAX_RESOURCES_AMOUNT]) {// 0 on success, -1 if not
     int i = 0;
-    while (dynamicResources[i] != NULL) {i++;}
+    while (dynamicResources[i] != NULL) { i++; }
     dynamicResources[i] = malloc(sizeof(struct dynamicResource));
     if (dynamicResources[i] == NULL) return -1;
     dynamicResources[i]->key = calloc(sizeof(char) * strlen(requestedRoute) + 1, sizeof(char));
@@ -292,7 +320,7 @@ int add_dynamic_record(char* requestedRoute, char* payload, struct dynamicResour
     return 0;
 }
 
-int delete_dynamic_record(char * requestedRoute, struct dynamicResource* dynamicResources[MAX_RESOURCES_AMOUNT]) {
+int delete_dynamic_record(char *requestedRoute, struct dynamicResource *dynamicResources[MAX_RESOURCES_AMOUNT]) {
     for (int i = 0; i < MAX_RESOURCES_AMOUNT && dynamicResources[i] != NULL; i++) {
         if (strncmp(dynamicResources[i]->key, requestedRoute, strlen(requestedRoute)) == 0) {
             free(dynamicResources[i]->key);
@@ -305,11 +333,12 @@ int delete_dynamic_record(char * requestedRoute, struct dynamicResource* dynamic
     return -1;
 }
 
-int parse_requests(char* msg, struct httpRequest* reqs[10], int* position) { //return value - -1 if error, amount of parsed reqs otherw
+int parse_requests(char *msg, struct httpRequest *reqs[10],
+                   int *position) { //return value - -1 if error, amount of parsed reqs otherw
     int reqsi = 0;
     int pos = 0;
     while (reqsi < 10) {
-        struct httpRequest* parsedReq = calloc(1, sizeof(struct httpRequest));
+        struct httpRequest *parsedReq = calloc(1, sizeof(struct httpRequest));
         int res = parse_request(msg + pos, parsedReq);
         if (res == -1) {
             if (parsedReq->status > -2) { //if the req is complete
@@ -328,7 +357,7 @@ int parse_requests(char* msg, struct httpRequest* reqs[10], int* position) { //r
     return reqsi;
 }
 
-int parse_request(char* msg, struct httpRequest* req) { //req->status = -1 means the request is invalid, -2 not complete
+int parse_request(char *msg, struct httpRequest *req) { //req->status = -1 means the request is invalid, -2 not complete
     req->status = 0;
     int pos = 0;
     if (strlen(msg) == 0) return 0;
@@ -379,7 +408,7 @@ int parse_request(char* msg, struct httpRequest* req) { //req->status = -1 means
     }
     pos += strlen("\r\n");
     int headersLen = parse_headers(msg + pos, req->headers);
-    if ( headersLen == -1) { //didn't find end of headers -> incomplete
+    if (headersLen == -1) { //didn't find end of headers -> incomplete
         req->status = -2;
         return -1;
     }
@@ -400,12 +429,12 @@ int parse_request(char* msg, struct httpRequest* req) { //req->status = -1 means
         req->status = -1;
         return pos;
     }
-    if (contentLen > strlen(msg+pos)) {//payload may be not received as whole
+    if (contentLen > strlen(msg + pos)) {//payload may be not received as whole
         req->status = -2;//incomplete
         return pos;
     }
     req->payload = calloc(contentLen + 1, sizeof(char));
-    strncpy(req->payload, msg+pos, contentLen);
+    strncpy(req->payload, msg + pos, contentLen);
     return pos + contentLen;
 //    if (strncmp(msg + pos, crlf, strlen(crlf)) == 0) {    //no payload;
 //        req->payload = NULL;
@@ -424,10 +453,10 @@ int parse_request(char* msg, struct httpRequest* req) { //req->status = -1 means
 
 }
 
-int parse_headers(char* msg, struct header** headers) {
+int parse_headers(char *msg, struct header **headers) {
     int pos = 0;
     for (int i = 0; i < MAX_HEADERS_AMOUNT; i++) {
-       headers[i] = NULL;
+        headers[i] = NULL;
     }
     char crlf[] = "\r\n";
     int headeri = 0;
@@ -436,23 +465,23 @@ int parse_headers(char* msg, struct header** headers) {
             return pos + strlen(crlf);
         }
 
-        char* delim = strchr(msg + pos, ':');
+        char *delim = strchr(msg + pos, ':');
         if (delim == NULL) {
             return -1;
         }
         int keyLen = delim - (msg + pos);
-        struct header* parsedHeader = calloc(1, sizeof(struct header));
-        parsedHeader->key = calloc(keyLen+1, sizeof(char));
+        struct header *parsedHeader = calloc(1, sizeof(struct header));
+        parsedHeader->key = calloc(keyLen + 1, sizeof(char));
         strncpy(parsedHeader->key, msg + pos, keyLen);
         pos += keyLen + 2;
 
-        char* endOfVal = strchr(msg + pos, '\r');
+        char *endOfVal = strchr(msg + pos, '\r');
         if (endOfVal == NULL) {
             free(parsedHeader->key);
             free(parsedHeader);
             return -1;
         }
-        int  lenOnVal = endOfVal - (msg + pos);
+        int lenOnVal = endOfVal - (msg + pos);
         parsedHeader->value = calloc(lenOnVal + 1, sizeof(char));
         strncpy(parsedHeader->value, msg + pos, lenOnVal);
         pos += lenOnVal;
@@ -464,17 +493,18 @@ int parse_headers(char* msg, struct header** headers) {
 
         }
         pos += strlen(crlf);
-        headers[headeri]  = parsedHeader;
+        headers[headeri] = parsedHeader;
         headeri++;
     }
 }
 
-void free_httpRequest(struct httpRequest* req) {
+void free_httpRequest(struct httpRequest *req) {
     free(req->HTTPMethode);
     free(req->HTTPVersion);
     free(req->route);
     free(req->payload);
-    for (int i= 0; req->headers[i] != NULL; i++) {
+    for (int i = 0; req->headers[i] != null; i++) {
+    for (int i= 0; req->headers[i] != null; i++) {
         free(req->headers[i]->key);
         free(req->headers[i]->value);
         free(req->headers[i]);
@@ -482,106 +512,116 @@ void free_httpRequest(struct httpRequest* req) {
 
     free(req);
 }
+
+char *append_strings(char *str1, char *str2) {
 char* append_strings(char* str1, char* str2) {
-    if (str1 == NULL) {
-        if (str2 == NULL) return NULL;
+    if (str1 == null) {
+        if (str2 == null) return null;
         return str2;
     }
-    if (str2 == NULL) return str1;
+    if (str2 == null) return str1;
+    char *res = calloc(strlen(str1) + strlen(str2) + 1, sizeof(char));
     char* res = calloc(strlen(str1) + strlen(str2) + 1, sizeof(char));
-    if (res == NULL) return NULL;
+    if (res == null) return null;
     strncpy(res, str1, strlen(str1));
+    strncpy(res + strlen(str1), str2, strlen(str2));
     strncpy(res+strlen(str1), str2, strlen(str2));
     return res;
 }
 
-void free_dynamic_records(struct dynamicResource* dynamicResources[MAX_RESOURCES_AMOUNT]) {
-    for (int i = 0; i < MAX_RESOURCES_AMOUNT && dynamicResources[i] != NULL; i++) {
-        free(dynamicResources[i]->key);
-        free(dynamicResources[i]->value);
+void free_dynamic_records(struct dynamicresource *dynamicresources[max_resources_amount]) {
+void free_dynamic_records(struct dynamicresource* dynamicresources[max_resources_amount]) {
+    for (int i = 0; i < max_resources_amount && dynamicresources[i] != null; i++) {
+        free(dynamicresources[i]->key);
+        free(dynamicresources[i]->value);
     }
 }
 
+uint16_t hash(const char *str) {
+    uint8_t digest[sha256_digest_length];
+    sha256((uint8_t *) str, strlen(str), digest);
+    return htons(*((uint16_t *) digest)); // we only use the first two bytes here
+}
+
 uint16_t hash(const char* str) {
-     uint8_t digest[SHA256_DIGEST_LENGTH];
-     SHA256((uint8_t *)str, strlen(str), digest);
-     return htons(*((uint16_t *)digest)); // We only use the first two bytes here
+     uint8_t digest[sha256_digest_length];
+     sha256((uint8_t *)str, strlen(str), digest);
+     return htons(*((uint16_t *)digest)); // we only use the first two bytes here
      }
 int get_prev_node_id() {
-    char* res = getenv("SUCC_ID");
-    if (res == NULL) {
+    char *res = getenv("succ_id");
+    char* res = getenv("succ_id");
+    if (res == null) {
         return -1;
     }
+    char *s;
     char* s;
     int id = strtol(res, &s, 10);
     return id;
 }
-int populate_dht_struct(struct dht* dht) {
-   char* pred_id = getenv("PRED_ID");
-   if (pred_id == NULL) {
-       dht->prev_node_id = 0;
-   } else {
-       dht->prev_node_id = atol(pred_id);
-   }
-   char* pred_ip = getenv("PRED_IP");
-   if (pred_ip != NULL) {
-       dht->prev_ip = calloc(1, strlen(pred_ip) + 1);
-       strncpy(dht->prev_ip, pred_ip, strlen(pred_ip));
-   }
-   char* pred_port = getenv("PRED_PORT");
-   if (pred_port != NULL) {
-       dht->prev_port = atol(pred_port);
-   }
-   char* succ_id = getenv("SUCC_ID");
-   if (succ_id != NULL) {
-       dht->succ_id = atol(succ_id);
-   }
-   char* succ_ip = getenv("SUCC_IP");
-   if (succ_ip != NULL) {
-       dht->succ_ip = calloc(1, strlen(succ_ip) + 1);
-       strncpy(dht->succ_ip, succ_ip, strlen(succ_ip));
-   }
-   char* succ_port = getenv("SUCC_PORT");
-   if (succ_port != NULL) {
-       dht->succ_port = atol(succ_port);
-   }
+
+int populate_dht_struct(struct data *data, uint16_t id, char *ipaddr, uint16_t port) {
+    memset(data->dhtInstance, 0, sizeof(struct dht));
+    data->dhtInstance->node_id = id;
+    data->dhtInstance->node_ip = calloc(1, INET_ADDRSTRLEN + 1);
+    strncpy(data->dhtInstance->node_ip, ipaddr, strlen(ipaddr));
+    data->dhtInstance->node_port = port;
+    data->dhtInstance->prev_ip = calloc(1, INET_ADDRSTRLEN + 1);
+    data->dhtInstance->succ_ip = calloc(1, INET_ADDRSTRLEN + 1);
+//    if (data->started_with_anchor == 1) {
+//        return 0;
+//    }
+    char *pred_id = getenv("PRED_ID");
+    if (pred_id == NULL) {
+        data->dhtInstance->prev_node_id = id;
+    } else {
+        data->dhtInstance->prev_node_id = atol(pred_id);
+    }
+    char *pred_ip = getenv("PRED_IP");
+    if (pred_ip != NULL) {
+        strncpy(data->dhtInstance->prev_ip, pred_ip, strlen(pred_ip));
+    } else {
+        strncpy(data->dhtInstance->prev_ip, ipaddr, strlen(ipaddr));
+    }
+
+    char *pred_port = getenv("PRED_PORT");
+    if (pred_port != NULL) {
+        data->dhtInstance->prev_port = atol(pred_port);
+    } else {
+        data->dhtInstance->prev_port = port;
+    }
+    char *succ_id = getenv("SUCC_ID");
+    if (succ_id != NULL) {
+        data->dhtInstance->succ_id = atol(succ_id);
+    } else {
+        data->dhtInstance->succ_id = id;
+    }
+    char *succ_ip = getenv("SUCC_IP");
+    if (succ_ip != NULL) {
+        strncpy(data->dhtInstance->succ_ip, succ_ip, strlen(succ_ip));
+    } else {
+        strncpy(data->dhtInstance->succ_ip, ipaddr, strlen(ipaddr));
+    }
+    char *succ_port = getenv("SUCC_PORT");
+    if (succ_port != NULL) {
+        data->dhtInstance->succ_port = atol(succ_port);
+    } else {
+        data->dhtInstance->succ_port = port;
+    }
     return 0;
 }
 
-int send_lookup(int fd, struct dht* dht, uint16_t hash, struct addrinfo* p) {
+void populate_hash_records(struct data *data) {
+//    struct hash_record* hashR1= data->hash_records[0];
+//    hashR1->node_id = data->dhtInstance->prev_node_id;
+//    sprintf(hashR1->host, "%s:%d", data->dhtInstance->prev_ip, data->dhtInstance->prev_port);
 
-    // Access the binary form of the IP address
-    uint8_t buf[11];
-    int offset = 0;
-    buf[0] = 0; //code of lookup
-    offset++;
-
-    uint16_t hashN = htons(hash);
-    memcpy(buf + offset, &hashN, sizeof(uint16_t)); //hash of resource
-    offset += sizeof(uint16_t);
-
-    uint16_t node_idN = htons(dht->node_id);
-    memcpy(buf + offset, &node_idN, sizeof(uint16_t)); //succ_node_id
-    offset += sizeof(uint16_t);
-
-    struct in_addr node__addr;
-    if (inet_pton(AF_INET, dht->node_ip, &node__addr) <= 0) {
-        perror("inet_pton");
+    struct hash_record *hashR2 = data->hash_records[1];
+    if (data->dhtInstance->succ_ip != NULL) {
+        hashR2->node_id = data->dhtInstance->succ_id;
+        sprintf(hashR2->host, "%s:%d", data->dhtInstance->succ_ip, data->dhtInstance->succ_port);
     }
-    memcpy(buf + offset, &node__addr.s_addr, 4);
-    offset += 4;
-
-    uint16_t succ_portN = htons(dht->node_port);
-    memcpy(buf + offset, &succ_portN, sizeof(uint16_t));
-
-    struct sockaddr_in node_addr;
-    memset(&node_addr, 0, sizeof(node_addr));
-
-    node_addr.sin_family = AF_INET;
-    node_addr.sin_port = htons(dht->succ_port);
-    inet_pton(AF_INET, dht->succ_ip, &node_addr.sin_addr);
-
-    int bytes_sent = sendto(fd, buf, sizeof(buf), 0, (struct sockaddr*)&node_addr, sizeof(node_addr));
-    printf("lookup sent %d bytes, to %s:%d\n", bytes_sent, dht->succ_ip, dht->succ_port);
-    return bytes_sent;
+    data->oldest_record += 1;
 }
+
+

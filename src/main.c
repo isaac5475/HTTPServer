@@ -41,18 +41,21 @@ int main(int varc, char* argv[])
 //    }
     char* ipaddr = argv[1];
     char* port = argv[2];
+    int node_id = 0;
     char* res;
-    int node_id = strtol(argv[3], &res, 10);
-    int sockfd_tcp, new_fd_tcp;  // TCP: listen on sock_fd, new connection on new_fd
-    int sockfd_udp;
-    int num_bytes;
+    if (varc > 3) {
+         node_id = strtol(argv[3], &res, 10);
+         if (*res != '\0') {
+             node_id = 0;
+         }
+    }
+    int new_fd_tcp;  // TCP: listen on sock_fd, new connection on new_fd
     struct sockaddr_storage their_addr_tcp; // connector's address information
     struct sockaddr_in their_addr_udp;
     struct sigaction sa;
     socklen_t sin_size;
     socklen_t addr_len;
     char s[INET6_ADDRSTRLEN];
-    char buf[REQUEST_LEN];
     struct dynamicResource dynamicResources[MAX_RESOURCES_AMOUNT];
     struct data data;
     memset(dynamicResources, 0, MAX_RESOURCES_AMOUNT * sizeof(struct  dynamicResource*));
@@ -65,76 +68,125 @@ int main(int varc, char* argv[])
     }
 
     struct dht dhtInstance;
-    memset(&dhtInstance, 0, sizeof(struct dht));
-    populate_dht_struct(&dhtInstance);
-    dhtInstance.node_id = atol(argv[3]);
     data.dhtInstance = &dhtInstance;
-    data.dhtInstance->node_ip = calloc(1, strlen(ipaddr)+1);
-    memcpy(data.dhtInstance->node_ip, ipaddr, strlen(ipaddr));
-    data.dhtInstance->node_port = atol(port);
+    populate_dht_struct(&data, node_id, ipaddr, atol(port));
 
-    start_server_tcp(ipaddr, port, &sockfd_tcp);
-    data.p = start_server_udp(ipaddr, port, &sockfd_udp);
-    data.udpfd = sockfd_udp;
+    start_server_tcp(ipaddr, port, &data.sockfd_tcp);
+    data.p = start_server_udp(ipaddr, port, &data.sockfd_udp);
     data.oldest_record = 0;
     struct hash_record* hash_records[10];
     for (int i = 0; i < 10; i++) {
         hash_records[i] = calloc(1, sizeof(struct hash_record));
     }
     data.hash_records = (struct hash_record **) hash_records;
+    populate_hash_records(&data);
     data.dynamicResources = &dynamicResources;
-    data.node_id = node_id;
 
-    if (listen(sockfd_tcp, BACKLOG) == -1) {
+    fd_set master;
+    fd_set read_fds;
+    int fdmax;
+    data.fdset = &master;
+    FD_ZERO(&master);
+    FD_ZERO(&read_fds);
+
+    if (listen(data.sockfd_tcp, BACKLOG) == -1) {
         perror("listen");
         exit(1);
     }
-        while (1) {  // main loop
-            uint8_t udp_buff[11];
-            memset(udp_buff, 0, 11);
-            addr_len = sizeof their_addr_udp;
-            ssize_t bytes_read = recvfrom(sockfd_udp, udp_buff, 11, 0,
-                                (struct sockaddr *)&their_addr_udp, &addr_len);
-            if (bytes_read == -1) {
-                if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                // Do nothing
-                } else {
-                    perror("recvfrom");
-                    exit(1);
+    FD_SET(data.sockfd_tcp, &master);
+    fdmax = data.sockfd_tcp;
+    FD_SET(data.sockfd_udp, &master);
+    if (data.sockfd_udp > fdmax) {
+        fdmax = data.sockfd_udp;
+    }
+    char msgPrefix[REQUEST_LEN];
+    memset(msgPrefix, 0, REQUEST_LEN);
+    if (varc == 6) {
+        data.started_with_anchor = 1;
+    } else {
+        data.started_with_anchor = 0;
+    }
+
+    if (data.started_with_anchor == 1) {
+        send_join_msg_on_start(&data, argv[4], atol(argv[5]));
+    }
+
+    while (1) {  // main loop
+        read_fds = master;
+        struct timeval tv;
+        tv.tv_sec = 0;
+        tv.tv_usec = 100000;
+        if (select(fdmax+1, &read_fds, NULL, NULL, &tv) == -1) {
+            perror("select");
+            exit(4);
+        }
+        if (data.dhtInstance->succ_id != data.dhtInstance->node_id) {
+            send_stabilize_msg(data.sockfd_udp, &data);
+        }
+        for (int i = 0; i <= fdmax; i++) {
+            if (FD_ISSET(i, &read_fds)) {
+                if (i == sockfd_udp) {
+                    //handle udp
+                    uint8_t udp_buff[11];
+                    memset(udp_buff, 0, 11);
+                    addr_len = sizeof their_addr_udp;
+                    ssize_t bytes_read = recvfrom(i, udp_buff, 11, 0,
+                                                  (struct sockaddr *)&their_addr_udp, &addr_len);
+                    if (bytes_read == -1) {
+                        perror("recvfrom");
+                        exit(1);
+                    } else if (bytes_read > 0) {
+                        udp_handler(udp_buff, data.sockfd_udp, (struct sockaddr*)&their_addr_udp, addr_len, &data, data.dhtInstance);
+                    }
                 }
-            } else if (bytes_read > 0) {
-//                printf("listener: got packet from %s\n",
-//                       inet_ntop(their_addr_udp.ss_family,
-//                                 get_in_addr((struct sockaddr *) &their_addr_udp),
-//                                 s, sizeof s));
-                printf("listener: packet is %d bytes long\n", bytes_read);
-                udp_handler(udp_buff, data.udpfd, (struct sockaddr*)&their_addr_udp, addr_len, &data, data.dhtInstance);
-            }
+                else if (i == data.sockfd_tcp) {
+                    //handle tcp
+                    sin_size = sizeof their_addr_tcp;
+                    new_fd_tcp = accept(data.sockfd_tcp, (struct sockaddr *) &their_addr_tcp, &sin_size);
+                    if (new_fd_tcp == -1) {
+                        perror("accept");
+                    } else {
+                        FD_SET(new_fd_tcp, &master);
+                        if (new_fd_tcp > fdmax) {
+                            fdmax = new_fd_tcp;
+                        }
+                        printf("select server: accepted new connection: %d\n", new_fd_tcp);
+                        if (new_fd_tcp == -1) {
+                            perror("accept");
+                        }
 
-            //tcp handler
+                        inet_ntop(their_addr_tcp.ss_family,
+                                  get_in_addr((struct sockaddr *) &their_addr_tcp),
+                                  s, sizeof s);
+                        printf("server: got connection from %s\n", s);
 
-            sin_size = sizeof their_addr_tcp;
-            new_fd_tcp = accept(sockfd_tcp, (struct sockaddr *) &their_addr_tcp, &sin_size);
-            if (new_fd_tcp == -1) {
-                if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                    //Do Nothing and skip
+                    }
                 }
-            } else {
-                printf("accepted new connection: %d", new_fd_tcp);
-                if (new_fd_tcp == -1) {
-                    perror("accept");
+                else {
+                    // handle tcp connection
+                    printf("handling connection with TCP socket %d\n", i);
+                    request_handler(i, msgPrefix, &data);
                 }
-
-                inet_ntop(their_addr_tcp.ss_family,
-                          get_in_addr((struct sockaddr *) &their_addr_tcp),
-                          s, sizeof s);
-                printf("server: got connection from %s\n", s);
-
-                char msgPrefix[REQUEST_LEN];
-                memset(msgPrefix, 0, REQUEST_LEN);
-                request_handler(new_fd_tcp, msgPrefix, &data);
-                close(new_fd_tcp);
             }
         }
+    }
+}
+
+void send_join_msg_on_start(struct data *data, const char *anchor_ip, uint16_t anchor_port) {
+    uint8_t packet[11];
+    struct in_addr node__addr;
+    if (inet_pton(AF_INET, (*data).dhtInstance->node_ip, &node__addr) <= 0) {
+        perror("inet_pton");
+    }
+    create_msg(packet, JOIN_MODE, 0, (*data).dhtInstance->node_id, &node__addr, (*data).dhtInstance->node_port);
+    struct sockaddr_in anchor_addr;
+    memset(&anchor_addr, 0, sizeof(anchor_addr));
+
+    anchor_addr.sin_family = AF_INET;
+    anchor_addr.sin_port = htons(anchor_port);
+    if (inet_pton(AF_INET, anchor_ip, &anchor_addr.sin_addr) <= 0) {
+        perror("inet_pton");
+    }
+    send_msg((*data).sockfd_udp, packet, &anchor_addr);
 }
 
